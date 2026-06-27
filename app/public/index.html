@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>filetree</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="sidebar">
+    <div id="search-container">
+      <input id="search" type="text" placeholder="Search files..." autocomplete="off" />
+    </div>
+    <div id="tree"></div>
+  </div>
+  <div id="viewer">
+    <div id="viewer-placeholder">Select a file to view its contents</div>
+    <div id="viewer-content" style="display:none">
+      <div id="viewer-header">
+        <span id="viewer-path"></span>
+        <button id="viewer-close">&times;</button>
+      </div>
+      <pre id="viewer-body"></pre>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

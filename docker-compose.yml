@@ -1,0 +1,12 @@
+services:
+  dev:
+    build: .
+    container_name: revuiw-dev
+    working_dir: /workspace
+    environment:
+      - BASE_DIR=/workspace
+    volumes:
+      - .:/workspace
+    ports:
+      - "3000:3000"
+    command: bun run app/server.ts
