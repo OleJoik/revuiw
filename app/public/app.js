@@ -168,13 +168,13 @@ async function loadBrowseDirs(path) {
   browseDirsEl.innerHTML = '<div class="loading">Loading...</div>';
   try {
     const res = await fetch(`/api/dirs?path=${encodeURIComponent(path)}`);
-    if (!res.ok) throw new Error("Failed");
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load directory");
     currentBrowsePath = data.path;
     browsePathEl.value = data.path;
     renderBrowseDirs(data);
-  } catch {
-    browseDirsEl.innerHTML = '<div class="empty" style="color:#f38ba8">Failed to load directory</div>';
+  } catch (err) {
+    browseDirsEl.innerHTML = `<div class="empty" style="color:#f38ba8">${err.message}</div>`;
   }
 }
 
@@ -270,11 +270,12 @@ async function loadTree() {
   treeEl.innerHTML = '<div class="loading">Loading...</div>';
   try {
     const res = await fetch(`/api/tree?path=${encodeURIComponent(currentRoot)}`);
-    if (!res.ok) throw new Error("Failed to load tree");
-    treeData = await res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load tree");
+    treeData = data;
     renderTree();
-  } catch {
-    treeEl.innerHTML = '<div class="loading" style="color:#f38ba8">Failed to load directory</div>';
+  } catch (err) {
+    treeEl.innerHTML = `<div class="loading" style="color:#f38ba8">${err.message}</div>`;
   }
 }
 

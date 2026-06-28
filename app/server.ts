@@ -82,115 +82,117 @@ async function scanGitRepos(parentPath: string): Promise<string[]> {
 Bun.serve({
   port: 3000,
   async fetch(req) {
-    const url = new URL(req.url);
-    const pathname = url.pathname;
+    try {
+      const url = new URL(req.url);
+      const pathname = url.pathname;
 
-    // ---- Roots ----
-    if (pathname === "/api/roots" && req.method === "GET") {
-      const roots = await loadRoots();
-      for (const r of roots) await refreshRoot(r);
-      return new Response(JSON.stringify(roots), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    if (pathname === "/api/roots" && req.method === "POST") {
-      const { path: p } = await req.json();
-      if (!p) return new Response("Missing path", { status: 400 });
-      const resolved = resolve(p);
-      const isGit = await isGitRepo(resolved);
-      const entry: RootEntry = {
-        path: resolved,
-        label: basename(resolved),
-        type: isGit ? "git" : "dir",
-        branch: isGit ? await getGitBranch(resolved) : undefined,
-      };
-      const roots = await loadRoots();
-      if (!roots.find(r => r.path === resolved)) {
-        roots.push(entry);
-        await saveRoots(roots);
+      if (pathname === "/api/roots" && req.method === "GET") {
+        const roots = await loadRoots();
+        for (const r of roots) await refreshRoot(r);
+        return new Response(JSON.stringify(roots), {
+          headers: { "Content-Type": "application/json" },
+        });
       }
-      return new Response(JSON.stringify(roots), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
 
-    if (pathname === "/api/roots" && req.method === "DELETE") {
-      const { path: p } = await req.json();
-      const roots = (await loadRoots()).filter(r => r.path !== resolve(p));
-      await saveRoots(roots);
-      return new Response(JSON.stringify(roots), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // ---- Scan for git repos ----
-    if (pathname === "/api/scan") {
-      const dir = url.searchParams.get("path") || "/workspace";
-      const repos = await scanGitRepos(resolve(dir));
-      return new Response(JSON.stringify(repos), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // ---- Tree ----
-    if (pathname === "/api/tree") {
-      const dirPath = url.searchParams.get("path");
-      if (!dirPath) return new Response("Missing path", { status: 400 });
-      const tree = await buildTree(resolve(dirPath));
-      return new Response(JSON.stringify(tree), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // ---- Read file ----
-    if (pathname === "/api/read") {
-      const filePath = url.searchParams.get("path");
-      if (!filePath) return new Response("Missing path", { status: 400 });
-      const content = await readFile(resolve(filePath), "utf-8");
-      return new Response(JSON.stringify({ content }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // ---- Directory listing for browse modal ----
-    if (pathname === "/api/dirs") {
-      const dirPath = url.searchParams.get("path");
-      if (!dirPath) return new Response("Missing path", { status: 400 });
-      const resolved = resolve(dirPath);
-
-      const parent = resolved === "/" ? null : dirname(resolved);
-      const isGit = await isGitRepo(resolved);
-      const branch = isGit ? await getGitBranch(resolved) : undefined;
-
-      const entries = await readdir(resolved, { withFileTypes: true });
-      const dirs = [];
-      for (const e of entries) {
-        if (e.isDirectory() && !EXCLUDED.has(e.name) && !e.name.startsWith(".")) {
-          const fp = join(resolved, e.name);
-          const dGit = await isGitRepo(fp);
-          dirs.push({
-            name: e.name,
-            path: fp,
-            isGit: dGit,
-            branch: dGit ? await getGitBranch(fp) : undefined,
-          });
+      if (pathname === "/api/roots" && req.method === "POST") {
+        const { path: p } = await req.json();
+        if (!p) return new Response("Missing path", { status: 400 });
+        const resolved = resolve(p);
+        const isGit = await isGitRepo(resolved);
+        const entry: RootEntry = {
+          path: resolved,
+          label: basename(resolved),
+          type: isGit ? "git" : "dir",
+          branch: isGit ? await getGitBranch(resolved) : undefined,
+        };
+        const roots = await loadRoots();
+        if (!roots.find(r => r.path === resolved)) {
+          roots.push(entry);
+          await saveRoots(roots);
         }
+        return new Response(JSON.stringify(roots), {
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
-      dirs.sort((a, b) => a.name.localeCompare(b.name));
+      if (pathname === "/api/roots" && req.method === "DELETE") {
+        const { path: p } = await req.json();
+        const roots = (await loadRoots()).filter(r => r.path !== resolve(p));
+        await saveRoots(roots);
+        return new Response(JSON.stringify(roots), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
 
-      return new Response(JSON.stringify({ path: resolved, parent, isGit, branch, dirs }), {
+      if (pathname === "/api/scan") {
+        const dir = url.searchParams.get("path") || "/workspace";
+        const repos = await scanGitRepos(resolve(dir));
+        return new Response(JSON.stringify(repos), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (pathname === "/api/tree") {
+        const dirPath = url.searchParams.get("path");
+        if (!dirPath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const tree = await buildTree(resolve(dirPath));
+        return new Response(JSON.stringify(tree), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (pathname === "/api/read") {
+        const filePath = url.searchParams.get("path");
+        if (!filePath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const content = await readFile(resolve(filePath), "utf-8");
+        return new Response(JSON.stringify({ content }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (pathname === "/api/dirs") {
+        const dirPath = url.searchParams.get("path");
+        if (!dirPath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
+
+        const resolved = resolve(dirPath);
+        const parent = resolved === "/" ? null : dirname(resolved);
+        const isGit = await isGitRepo(resolved);
+        const branch = isGit ? await getGitBranch(resolved) : undefined;
+
+        const entries = await readdir(resolved, { withFileTypes: true });
+        const dirs = [];
+        for (const e of entries) {
+          if (e.isDirectory() && !EXCLUDED.has(e.name) && !e.name.startsWith(".")) {
+            const fp = join(resolved, e.name);
+            const dGit = await isGitRepo(fp);
+            dirs.push({
+              name: e.name,
+              path: fp,
+              isGit: dGit,
+              branch: dGit ? await getGitBranch(fp) : undefined,
+            });
+          }
+        }
+
+        dirs.sort((a, b) => a.name.localeCompare(b.name));
+
+        return new Response(JSON.stringify({ path: resolved, parent, isGit, branch, dirs }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const staticPath = pathname === "/" ? "/index.html" : pathname;
+      const file = Bun.file(join(import.meta.dir, "public", staticPath));
+      if (await file.exists()) return new Response(file);
+
+      return new Response("Not found", { status: 404 });
+    } catch (err) {
+      console.error(err);
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: 500,
         headers: { "Content-Type": "application/json" },
       });
     }
-
-    // ---- Static files ----
-    const staticPath = pathname === "/" ? "/index.html" : pathname;
-    const file = Bun.file(join(import.meta.dir, "public", staticPath));
-    if (await file.exists()) return new Response(file);
-
-    return new Response("Not found", { status: 404 });
   },
 });
 
