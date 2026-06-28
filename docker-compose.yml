@@ -7,4 +7,4 @@ services:
       - .:/workspace
     ports:
       - "3000:3000"
-    command: bun run app/server.ts
+    command: bun --watch app/server.ts
