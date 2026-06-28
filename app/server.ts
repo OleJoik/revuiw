@@ -96,7 +96,7 @@ Bun.serve({
 
       if (pathname === "/api/roots" && req.method === "POST") {
         const { path: p } = await req.json();
-        if (!p) return new Response("Missing path", { status: 400 });
+        if (!p) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
         const resolved = resolve(p);
         const isGit = await isGitRepo(resolved);
         const entry: RootEntry = {
@@ -188,7 +188,8 @@ Bun.serve({
       return new Response("Not found", { status: 404 });
     } catch (err) {
       console.error(err);
-      return new Response(JSON.stringify({ error: err.message }), {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(JSON.stringify({ error: message }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
       });
