@@ -14,6 +14,7 @@
   --fg-folder: #fab387;
   --fg-file: #a6adc8;
   --accent: #89b4fa;
+  --green: #a6e3a1;
   --border: #313244;
   --font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
   --sidebar-w: min(380px, 40vw);
@@ -32,6 +33,8 @@ body {
   display: flex;
 }
 
+/* ---- Sidebar ---- */
+
 #sidebar {
   width: var(--sidebar-w);
   min-width: 240px;
@@ -41,6 +44,163 @@ body {
   flex-direction: column;
   user-select: none;
 }
+
+/* ---- Root section ---- */
+
+#root-section {
+  border-bottom: 1px solid var(--border);
+}
+
+#root-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+#root-current .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  color: var(--accent);
+}
+
+#root-current .branch {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-hover);
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+#root-actions {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+#root-input {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 12px;
+  outline: none;
+}
+
+#root-input:focus {
+  border-color: var(--accent);
+}
+
+#root-input::placeholder {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+#root-section button {
+  padding: 4px 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+#root-section button:hover {
+  background: var(--bg-active);
+}
+
+#root-section button:active {
+  background: var(--border);
+}
+
+#root-add-btn {
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+}
+
+#root-list {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.2s;
+}
+
+#root-list.open {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+#root-list .root-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.1s;
+}
+
+#root-list .root-item:hover {
+  background: var(--bg-hover);
+}
+
+#root-list .root-item.active {
+  background: var(--bg-active);
+}
+
+#root-list .root-item .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+#root-list .root-item .path {
+  color: var(--fg-muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+#root-list .root-item .branch {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+#root-list .root-item .remove-btn {
+  padding: 0 4px;
+  color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+#root-list .root-item .remove-btn:hover {
+  color: #f38ba8;
+}
+
+/* ---- Search ---- */
 
 #search-container {
   padding: 8px;
@@ -67,6 +227,8 @@ body {
 #search::placeholder {
   color: var(--fg-muted);
 }
+
+/* ---- Tree ---- */
 
 #tree {
   flex: 1;
@@ -141,6 +303,8 @@ body {
   color: var(--accent);
   font-size: 11px;
 }
+
+/* ---- Viewer ---- */
 
 #viewer {
   flex: 1;

@@ -3,8 +3,6 @@ services:
     build: .
     container_name: revuiw-dev
     working_dir: /workspace
-    environment:
-      - BASE_DIR=/workspace
     volumes:
       - .:/workspace
     ports:

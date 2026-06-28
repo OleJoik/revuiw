@@ -8,6 +8,15 @@
 </head>
 <body>
   <div id="sidebar">
+    <div id="root-section">
+      <div id="root-current"></div>
+      <div id="root-actions">
+        <input id="root-input" type="text" placeholder="/path/to/repo" />
+        <button id="root-add-btn" title="Add path">+</button>
+        <button id="root-scan-btn" title="Scan for git repos">Scan</button>
+      </div>
+      <div id="root-list"></div>
+    </div>
     <div id="search-container">
       <input id="search" type="text" placeholder="Search files..." autocomplete="off" />
     </div>

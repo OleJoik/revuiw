@@ -1,8 +1,15 @@
+let roots = [];
+let currentRoot = null;
 let treeData = null;
 let expanded = new Set();
 let selectedPath = null;
 let searchQuery = "";
 
+const rootCurrentEl = document.getElementById("root-current");
+const rootInputEl = document.getElementById("root-input");
+const rootAddBtn = document.getElementById("root-add-btn");
+const rootScanBtn = document.getElementById("root-scan-btn");
+const rootListEl = document.getElementById("root-list");
 const treeEl = document.getElementById("tree");
 const searchEl = document.getElementById("search");
 const placeholderEl = document.getElementById("viewer-placeholder");
@@ -11,12 +18,167 @@ const viewerPathEl = document.getElementById("viewer-path");
 const viewerBodyEl = document.getElementById("viewer-body");
 const viewerCloseEl = document.getElementById("viewer-close");
 
+// ---- Roots ----
+
+async function loadRoots() {
+  const res = await fetch("/api/roots");
+  roots = await res.json();
+  renderRoots();
+
+  if (!currentRoot && roots.length > 0) {
+    selectRoot(roots[0].path);
+  }
+}
+
+function renderRoots() {
+  rootCurrentEl.innerHTML = "";
+  rootListEl.innerHTML = "";
+
+  if (!currentRoot) {
+    rootCurrentEl.innerHTML = '<span class="label" style="color:var(--fg-muted)">No root selected</span>';
+    rootListEl.classList.remove("open");
+    return;
+  }
+
+  const cr = roots.find(r => r.path === currentRoot);
+  if (cr) {
+    const label = document.createElement("span");
+    label.className = "label";
+    label.textContent = cr.label;
+    rootCurrentEl.appendChild(label);
+    if (cr.branch) {
+      const badge = document.createElement("span");
+      badge.className = "branch";
+      badge.textContent = cr.branch;
+      rootCurrentEl.appendChild(badge);
+    }
+  }
+
+  rootCurrentEl.style.cursor = "pointer";
+  rootCurrentEl.title = roots.length > 0 ? "Click to toggle roots list" : "";
+  rootCurrentEl.onclick = () => {
+    if (roots.length > 0) rootListEl.classList.toggle("open");
+  };
+
+  if (roots.length === 0) {
+    rootListEl.classList.remove("open");
+    return;
+  }
+
+  rootListEl.classList.add("open");
+
+  for (const r of roots) {
+    const item = document.createElement("div");
+    item.className = "root-item";
+    if (r.path === currentRoot) item.classList.add("active");
+
+    const label = document.createElement("span");
+    label.className = "label";
+    label.textContent = r.label;
+    item.appendChild(label);
+
+    if (r.branch) {
+      const badge = document.createElement("span");
+      badge.className = "branch";
+      badge.textContent = r.branch;
+      item.appendChild(badge);
+    }
+
+    const path = document.createElement("span");
+    path.className = "path";
+    path.textContent = r.path;
+    item.appendChild(path);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "remove-btn";
+    removeBtn.textContent = "\u00D7";
+    removeBtn.title = "Remove";
+    removeBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await fetch("/api/roots", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: r.path }),
+      });
+      if (currentRoot === r.path) {
+        currentRoot = null;
+        selectedPath = null;
+        treeData = null;
+        expanded.clear();
+        renderTree();
+      }
+      await loadRoots();
+    });
+    item.appendChild(removeBtn);
+
+    item.addEventListener("click", () => selectRoot(r.path));
+    rootListEl.appendChild(item);
+  }
+}
+
+async function selectRoot(path) {
+  if (currentRoot === path) return;
+  currentRoot = path;
+  selectedPath = null;
+  viewerContentEl.style.display = "none";
+  placeholderEl.style.display = "flex";
+  expanded.clear();
+  searchQuery = "";
+  searchEl.value = "";
+  renderRoots();
+  await loadTree();
+}
+
+rootAddBtn.addEventListener("click", async () => {
+  const p = rootInputEl.value.trim();
+  if (!p) return;
+  rootInputEl.value = "";
+  await fetch("/api/roots", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: p }),
+  });
+  await loadRoots();
+  if (!currentRoot) {
+    const updated = await (await fetch("/api/roots")).json();
+    if (updated.length > 0) await selectRoot(updated[updated.length - 1].path);
+  }
+});
+
+rootInputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") rootAddBtn.click();
+});
+
+rootScanBtn.addEventListener("click", async () => {
+  const dir = currentRoot || "/workspace";
+  const res = await fetch(`/api/scan?path=${encodeURIComponent(dir)}`);
+  const repos = await res.json();
+  for (const repo of repos) {
+    await fetch("/api/roots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: repo }),
+    });
+  }
+  await loadRoots();
+});
+
+// ---- Tree ----
+
 async function loadTree() {
+  if (!currentRoot) {
+    treeEl.innerHTML = '<div class="loading">Select a root to browse</div>';
+    return;
+  }
   treeEl.innerHTML = '<div class="loading">Loading...</div>';
-  const res = await fetch("/api/tree?path=.");
-  treeData = await res.json();
-  expanded = new Set();
-  renderTree();
+  try {
+    const res = await fetch(`/api/tree?path=${encodeURIComponent(currentRoot)}`);
+    if (!res.ok) throw new Error("Failed to load tree");
+    treeData = await res.json();
+    renderTree();
+  } catch {
+    treeEl.innerHTML = '<div class="loading" style="color:#f38ba8">Failed to load directory</div>';
+  }
 }
 
 function renderTree() {
@@ -32,19 +194,14 @@ function countMatches(node, query) {
   let count = 0;
   if (node.name.toLowerCase().includes(query)) count++;
   if (node.children) {
-    for (const child of node.children) {
-      count += countMatches(child, query);
-    }
+    for (const child of node.children) count += countMatches(child, query);
   }
   return count;
 }
 
 function toggleExpand(path) {
-  if (expanded.has(path)) {
-    expanded.delete(path);
-  } else {
-    expanded.add(path);
-  }
+  if (expanded.has(path)) expanded.delete(path);
+  else expanded.add(path);
   renderTree();
 }
 
@@ -59,10 +216,14 @@ async function loadFile(path) {
   viewerContentEl.style.display = "flex";
   viewerPathEl.textContent = path;
   viewerBodyEl.textContent = "Loading...";
-
-  const res = await fetch(`/api/read?path=${encodeURIComponent(path)}`);
-  const data = await res.json();
-  viewerBodyEl.textContent = data.content;
+  try {
+    const res = await fetch(`/api/read?path=${encodeURIComponent(path)}`);
+    if (!res.ok) throw new Error("Failed to read file");
+    const data = await res.json();
+    viewerBodyEl.textContent = data.content;
+  } catch {
+    viewerBodyEl.textContent = "Error reading file";
+  }
 }
 
 viewerCloseEl.addEventListener("click", () => {
@@ -73,7 +234,7 @@ viewerCloseEl.addEventListener("click", () => {
 });
 
 function renderNode(node, parent, depth, isRoot) {
-  const nodePath = isRoot ? "." : node.path;
+  const nodePath = node.path;
   const isDir = node.type === "directory";
   const isOpen = expanded.has(nodePath);
 
@@ -85,8 +246,7 @@ function renderNode(node, parent, depth, isRoot) {
   }
 
   const hasSearch = searchQuery.length > 0;
-  const show = !hasSearch || matchCount > 0;
-  if (!show) return;
+  if (hasSearch && matchCount === 0) return;
 
   const row = document.createElement("div");
   row.className = "tree-node";
@@ -107,7 +267,6 @@ function renderNode(node, parent, depth, isRoot) {
 
   const label = document.createElement("span");
   label.className = "label";
-  label.textContent = node.name;
 
   if (searchQuery && nodeMatches) {
     const idx = node.name.toLowerCase().indexOf(searchQuery);
@@ -121,7 +280,11 @@ function renderNode(node, parent, depth, isRoot) {
       label.appendChild(before);
       label.appendChild(match);
       label.appendChild(after);
+    } else {
+      label.textContent = node.name;
     }
+  } else {
+    label.textContent = node.name;
   }
 
   row.appendChild(label);
@@ -134,11 +297,8 @@ function renderNode(node, parent, depth, isRoot) {
   }
 
   row.addEventListener("click", () => {
-    if (isDir) {
-      toggleExpand(nodePath);
-    } else {
-      selectFile(nodePath);
-    }
+    if (isDir) toggleExpand(nodePath);
+    else selectFile(nodePath);
   });
 
   parent.appendChild(row);
@@ -150,6 +310,8 @@ function renderNode(node, parent, depth, isRoot) {
   }
 }
 
+// ---- Search ----
+
 let searchTimer = null;
 searchEl.addEventListener("input", () => {
   clearTimeout(searchTimer);
@@ -158,6 +320,8 @@ searchEl.addEventListener("input", () => {
     renderTree();
   }, 150);
 });
+
+// ---- Keyboard ----
 
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "f") {
@@ -180,4 +344,6 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-loadTree();
+// ---- Init ----
+
+loadRoots();
