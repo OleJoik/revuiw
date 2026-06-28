@@ -11,9 +11,8 @@
     <div id="root-section">
       <div id="root-current"></div>
       <div id="root-actions">
-        <input id="root-input" type="text" placeholder="/path/to/repo" />
-        <button id="root-add-btn" title="Add path">+</button>
-        <button id="root-scan-btn" title="Scan for git repos">Scan</button>
+        <button id="root-browse-btn">Browse</button>
+        <button id="root-scan-btn">Scan</button>
       </div>
       <div id="root-list"></div>
     </div>
@@ -30,6 +29,21 @@
         <button id="viewer-close">&times;</button>
       </div>
       <pre id="viewer-body"></pre>
+    </div>
+  </div>
+  <div id="browse-modal" style="display:none">
+    <div id="browse-overlay"></div>
+    <div id="browse-dialog">
+      <div id="browse-header">Browse for folder</div>
+      <div id="browse-path-row">
+        <input id="browse-path" type="text" spellcheck="false" />
+        <button id="browse-go">Go</button>
+      </div>
+      <div id="browse-dirs"></div>
+      <div id="browse-footer">
+        <button id="browse-cancel">Cancel</button>
+        <button id="browse-select">Select this</button>
+      </div>
     </div>
   </div>
   <script src="/app.js"></script>

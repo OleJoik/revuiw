@@ -6,10 +6,16 @@ let selectedPath = null;
 let searchQuery = "";
 
 const rootCurrentEl = document.getElementById("root-current");
-const rootInputEl = document.getElementById("root-input");
-const rootAddBtn = document.getElementById("root-add-btn");
+const rootBrowseBtn = document.getElementById("root-browse-btn");
 const rootScanBtn = document.getElementById("root-scan-btn");
 const rootListEl = document.getElementById("root-list");
+const browseModal = document.getElementById("browse-modal");
+const browsePathEl = document.getElementById("browse-path");
+const browseGoBtn = document.getElementById("browse-go");
+const browseDirsEl = document.getElementById("browse-dirs");
+const browseCancelBtn = document.getElementById("browse-cancel");
+const browseSelectBtn = document.getElementById("browse-select");
+
 const treeEl = document.getElementById("tree");
 const searchEl = document.getElementById("search");
 const placeholderEl = document.getElementById("viewer-placeholder");
@@ -129,26 +135,6 @@ async function selectRoot(path) {
   await loadTree();
 }
 
-rootAddBtn.addEventListener("click", async () => {
-  const p = rootInputEl.value.trim();
-  if (!p) return;
-  rootInputEl.value = "";
-  await fetch("/api/roots", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path: p }),
-  });
-  await loadRoots();
-  if (!currentRoot) {
-    const updated = await (await fetch("/api/roots")).json();
-    if (updated.length > 0) await selectRoot(updated[updated.length - 1].path);
-  }
-});
-
-rootInputEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") rootAddBtn.click();
-});
-
 rootScanBtn.addEventListener("click", async () => {
   const dir = currentRoot || "/workspace";
   const res = await fetch(`/api/scan?path=${encodeURIComponent(dir)}`);
@@ -161,6 +147,117 @@ rootScanBtn.addEventListener("click", async () => {
     });
   }
   await loadRoots();
+});
+
+rootBrowseBtn.addEventListener("click", () => openBrowseModal(currentRoot || "/workspace"));
+
+// ---- Browse modal ----
+
+let currentBrowsePath = null;
+
+async function openBrowseModal(initialPath) {
+  currentBrowsePath = initialPath;
+  browseModal.style.display = "flex";
+  browsePathEl.value = initialPath;
+  await loadBrowseDirs(initialPath);
+  browsePathEl.focus();
+  browsePathEl.select();
+}
+
+async function loadBrowseDirs(path) {
+  browseDirsEl.innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    const res = await fetch(`/api/dirs?path=${encodeURIComponent(path)}`);
+    if (!res.ok) throw new Error("Failed");
+    const data = await res.json();
+    currentBrowsePath = data.path;
+    browsePathEl.value = data.path;
+    renderBrowseDirs(data);
+  } catch {
+    browseDirsEl.innerHTML = '<div class="empty" style="color:#f38ba8">Failed to load directory</div>';
+  }
+}
+
+function renderBrowseDirs(data) {
+  browseDirsEl.innerHTML = "";
+
+  if (data.parent) {
+    const row = document.createElement("div");
+    row.className = "browse-dir-row";
+    row.innerHTML = '<span class="icon">\u25B8</span><span class="label" style="color:var(--fg-muted)">..</span>';
+    row.addEventListener("click", () => loadBrowseDirs(data.parent));
+    browseDirsEl.appendChild(row);
+  }
+
+  if (data.dirs.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "(no subdirectories)";
+    browseDirsEl.appendChild(empty);
+    return;
+  }
+
+  for (const d of data.dirs) {
+    const row = document.createElement("div");
+    row.className = "browse-dir-row";
+
+    const icon = document.createElement("span");
+    icon.className = "icon";
+    icon.textContent = "\u25B6";
+    row.appendChild(icon);
+
+    const label = document.createElement("span");
+    label.className = "label";
+    label.textContent = d.name;
+    row.appendChild(label);
+
+    if (d.isGit && d.branch) {
+      const badge = document.createElement("span");
+      badge.className = "branch";
+      badge.textContent = d.branch;
+      row.appendChild(badge);
+    }
+
+    const arrow = document.createElement("span");
+    arrow.className = "arrow";
+    arrow.textContent = "\u203A";
+    row.appendChild(arrow);
+
+    row.addEventListener("click", () => loadBrowseDirs(d.path));
+    browseDirsEl.appendChild(row);
+  }
+}
+
+browseGoBtn.addEventListener("click", () => {
+  const path = browsePathEl.value.trim();
+  if (path) loadBrowseDirs(path);
+});
+
+browsePathEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") browseGoBtn.click();
+});
+
+browseCancelBtn.addEventListener("click", () => {
+  browseModal.style.display = "none";
+});
+
+browseSelectBtn.addEventListener("click", async () => {
+  if (!currentBrowsePath) return;
+  await fetch("/api/roots", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: currentBrowsePath }),
+  });
+  browseModal.style.display = "none";
+  await loadRoots();
+  if (currentRoot !== currentBrowsePath) {
+    await selectRoot(currentBrowsePath);
+  }
+});
+
+// Close modal on overlay click
+document.getElementById("browse-overlay").addEventListener("click", () => {
+  browseModal.style.display = "none";
 });
 
 // ---- Tree ----
@@ -333,7 +430,9 @@ document.addEventListener("keydown", (e) => {
     searchEl.focus();
   }
   if (e.key === "Escape") {
-    if (document.activeElement === searchEl) {
+    if (browseModal.style.display === "flex") {
+      browseModal.style.display = "none";
+    } else if (document.activeElement === searchEl) {
       searchEl.blur();
       searchEl.value = "";
       searchQuery = "";

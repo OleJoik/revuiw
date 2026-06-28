@@ -153,6 +153,38 @@ Bun.serve({
       });
     }
 
+    // ---- Directory listing for browse modal ----
+    if (pathname === "/api/dirs") {
+      const dirPath = url.searchParams.get("path");
+      if (!dirPath) return new Response("Missing path", { status: 400 });
+      const resolved = resolve(dirPath);
+
+      const parent = resolved === "/" ? null : dirname(resolved);
+      const isGit = await isGitRepo(resolved);
+      const branch = isGit ? await getGitBranch(resolved) : undefined;
+
+      const entries = await readdir(resolved, { withFileTypes: true });
+      const dirs = [];
+      for (const e of entries) {
+        if (e.isDirectory() && !EXCLUDED.has(e.name) && !e.name.startsWith(".")) {
+          const fp = join(resolved, e.name);
+          const dGit = await isGitRepo(fp);
+          dirs.push({
+            name: e.name,
+            path: fp,
+            isGit: dGit,
+            branch: dGit ? await getGitBranch(fp) : undefined,
+          });
+        }
+      }
+
+      dirs.sort((a, b) => a.name.localeCompare(b.name));
+
+      return new Response(JSON.stringify({ path: resolved, parent, isGit, branch, dirs }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // ---- Static files ----
     const staticPath = pathname === "/" ? "/index.html" : pathname;
     const file = Bun.file(join(import.meta.dir, "public", staticPath));
