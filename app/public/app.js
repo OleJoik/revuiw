@@ -4,6 +4,7 @@ let treeData = null;
 let expanded = new Set();
 let selectedPath = null;
 let searchQuery = "";
+let showHidden = false;
 
 const rootCurrentEl = document.getElementById("root-current");
 const rootBrowseBtn = document.getElementById("root-browse-btn");
@@ -18,6 +19,7 @@ const browseSelectBtn = document.getElementById("browse-select");
 
 const treeEl = document.getElementById("tree");
 const searchEl = document.getElementById("search");
+const toggleHiddenBtn = document.getElementById("toggle-hidden");
 const placeholderEl = document.getElementById("viewer-placeholder");
 const viewerContentEl = document.getElementById("viewer-content");
 const viewerPathEl = document.getElementById("viewer-path");
@@ -260,6 +262,12 @@ document.getElementById("browse-overlay").addEventListener("click", () => {
   browseModal.style.display = "none";
 });
 
+toggleHiddenBtn.addEventListener("click", () => {
+  showHidden = !showHidden;
+  toggleHiddenBtn.classList.toggle("active", showHidden);
+  loadTree();
+});
+
 // ---- Tree ----
 
 async function loadTree() {
@@ -269,7 +277,7 @@ async function loadTree() {
   }
   treeEl.innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const res = await fetch(`/api/tree?path=${encodeURIComponent(currentRoot)}`);
+    const res = await fetch(`/api/tree?path=${encodeURIComponent(currentRoot)}&showHidden=${showHidden}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to load tree");
     treeData = data;

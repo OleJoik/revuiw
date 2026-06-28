@@ -134,8 +134,9 @@ Bun.serve({
 
       if (pathname === "/api/tree") {
         const dirPath = url.searchParams.get("path");
+        const showHidden = url.searchParams.get("showHidden") === "true";
         if (!dirPath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
-        const tree = await buildTree(resolve(dirPath));
+        const tree = await buildTree(resolve(dirPath), showHidden);
         return new Response(JSON.stringify(tree), {
           headers: { "Content-Type": "application/json" },
         });
@@ -197,15 +198,15 @@ Bun.serve({
   },
 });
 
-async function buildTree(dir: string): Promise<TreeNode> {
+async function buildTree(dir: string, showHidden = false): Promise<TreeNode> {
   const children: TreeNode[] = [];
   const entries = await readdir(dir, { withFileTypes: true });
 
   for (const e of entries) {
-    if (EXCLUDED.has(e.name)) continue;
+    if (!showHidden && (EXCLUDED.has(e.name) || e.name.startsWith("."))) continue;
     const full = join(dir, e.name);
     if (e.isDirectory()) {
-      children.push(await buildTree(full));
+      children.push(await buildTree(full, showHidden));
     } else if (e.isFile()) {
       children.push({ name: e.name, type: "file", path: full });
     }

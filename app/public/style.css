@@ -370,10 +370,12 @@ body {
 #search-container {
   padding: 8px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
 }
 
 #search {
-  width: 100%;
+  flex: 1;
   padding: 6px 10px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -383,6 +385,29 @@ body {
   font-size: 13px;
   outline: none;
   transition: border-color 0.15s;
+}
+
+#toggle-hidden {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+#toggle-hidden:hover {
+  color: var(--fg);
+  background: var(--bg-hover);
+}
+
+#toggle-hidden.active {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 #search:focus {
