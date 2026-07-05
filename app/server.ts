@@ -227,8 +227,19 @@ Bun.serve({
         const resolved = resolve(filePath);
         const content = await readFile(resolved, "utf-8");
         const lang = getLang(resolved);
+        return new Response(JSON.stringify({ content, lang }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (pathname === "/api/highlight") {
+        const filePath = url.searchParams.get("path");
+        if (!filePath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const resolved = resolve(filePath);
+        const content = await readFile(resolved, "utf-8");
+        const lang = getLang(resolved);
         const tokens = tokenizeCode(content, lang);
-        return new Response(JSON.stringify({ content, tokens, lang }), {
+        return new Response(JSON.stringify({ tokens }), {
           headers: { "Content-Type": "application/json" },
         });
       }

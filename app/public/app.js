@@ -365,13 +365,21 @@ async function loadFile(path) {
   viewerPathEl.textContent = path;
   viewerBodyEl.textContent = "Loading...";
   try {
+    // Show plain text immediately
     const res = await fetch(`/api/read?path=${encodeURIComponent(path)}`);
     if (!res.ok) throw new Error("Failed to read file");
     const data = await res.json();
-    if (data.tokens) {
-      viewerBodyEl.innerHTML = renderTokens(data.tokens);
-    } else {
-      viewerBodyEl.textContent = data.content;
+    viewerBodyEl.textContent = data.content;
+
+    // Apply highlighting in background
+    if (data.lang) {
+      const hlRes = await fetch(`/api/highlight?path=${encodeURIComponent(path)}`);
+      if (hlRes.ok) {
+        const hlData = await hlRes.json();
+        if (hlData.tokens && viewerPathEl.textContent === path) {
+          viewerBodyEl.innerHTML = renderTokens(hlData.tokens);
+        }
+      }
     }
   } catch {
     viewerBodyEl.textContent = "Error reading file";
