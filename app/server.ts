@@ -1,6 +1,85 @@
 import { readdir, readFile, writeFile, mkdir, stat } from "fs/promises";
-import { join, relative, resolve, dirname, basename } from "path";
+import { join, relative, resolve, dirname, basename, extname } from "path";
 import { homedir } from "os";
+import { createHighlighter, type Highlighter } from "shiki";
+
+// --- Shiki syntax highlighting setup ---
+
+const LANG_MAP: Record<string, string> = {
+  ".ts": "typescript",
+  ".tsx": "tsx",
+  ".js": "javascript",
+  ".jsx": "jsx",
+  ".json": "json",
+  ".html": "html",
+  ".css": "css",
+  ".scss": "scss",
+  ".md": "markdown",
+  ".py": "python",
+  ".rs": "rust",
+  ".go": "go",
+  ".sh": "bash",
+  ".bash": "bash",
+  ".zsh": "bash",
+  ".yml": "yaml",
+  ".yaml": "yaml",
+  ".toml": "toml",
+  ".sql": "sql",
+  ".rb": "ruby",
+  ".java": "java",
+  ".c": "c",
+  ".cpp": "cpp",
+  ".h": "c",
+  ".hpp": "cpp",
+  ".dockerfile": "dockerfile",
+  ".xml": "xml",
+  ".svg": "xml",
+  ".vue": "vue",
+  ".svelte": "svelte",
+  ".php": "php",
+};
+
+const SUPPORTED_LANGS = [...new Set(Object.values(LANG_MAP))];
+const MAX_HIGHLIGHT_SIZE = 512 * 1024; // skip highlighting for files > 512KB
+
+let highlighter: Highlighter;
+
+async function initHighlighter() {
+  highlighter = await createHighlighter({
+    themes: ["dark-plus"],
+    langs: SUPPORTED_LANGS,
+  });
+  console.log(`shiki highlighter ready (${SUPPORTED_LANGS.length} languages)`);
+}
+
+function getLang(filePath: string): string | null {
+  const ext = extname(filePath).toLowerCase();
+  return LANG_MAP[ext] ?? null;
+}
+
+interface Token {
+  content: string;
+  color: string;
+}
+
+function tokenizeCode(code: string, lang: string | null): Token[][] | null {
+  if (!lang || code.length > MAX_HIGHLIGHT_SIZE) return null;
+  try {
+    const { tokens } = highlighter.codeToTokens(code, {
+      lang,
+      theme: "dark-plus",
+    });
+    // Flatten to just content + color per token
+    return tokens.map(line =>
+      line.map(t => ({ content: t.content, color: t.color || "#cdd6f4" }))
+    );
+  } catch {
+    return null;
+  }
+}
+
+// Initialize highlighter before starting server
+await initHighlighter();
 
 const EXCLUDED = new Set(["node_modules", ".git", "dist"]);
 const ROOTS_FILE = join(homedir(), ".filetree", "roots.json");
@@ -145,8 +224,11 @@ Bun.serve({
       if (pathname === "/api/read") {
         const filePath = url.searchParams.get("path");
         if (!filePath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
-        const content = await readFile(resolve(filePath), "utf-8");
-        return new Response(JSON.stringify({ content }), {
+        const resolved = resolve(filePath);
+        const content = await readFile(resolved, "utf-8");
+        const lang = getLang(resolved);
+        const tokens = tokenizeCode(content, lang);
+        return new Response(JSON.stringify({ content, tokens, lang }), {
           headers: { "Content-Type": "application/json" },
         });
       }

@@ -26,6 +26,29 @@ const viewerPathEl = document.getElementById("viewer-path");
 const viewerBodyEl = document.getElementById("viewer-body");
 const viewerCloseEl = document.getElementById("viewer-close");
 
+// ---- Persistence ----
+
+const LS = "revuiw:";
+
+function saveSetting(key, value) {
+  try { localStorage.setItem(LS + key, JSON.stringify(value)); } catch {}
+}
+
+function loadSetting(key, fallback = null) {
+  try {
+    const v = localStorage.getItem(LS + key);
+    return v !== null ? JSON.parse(v) : fallback;
+  } catch { return fallback; }
+}
+
+function saveExpanded() {
+  if (currentRoot) saveSetting("expanded:" + currentRoot, [...expanded]);
+}
+
+function loadExpanded() {
+  expanded = new Set(loadSetting("expanded:" + currentRoot, []));
+}
+
 // ---- Roots ----
 
 async function loadRoots() {
@@ -34,7 +57,9 @@ async function loadRoots() {
   renderRoots();
 
   if (!currentRoot && roots.length > 0) {
-    selectRoot(roots[0].path);
+    const savedRoot = loadSetting("currentRoot");
+    const target = roots.find(r => r.path === savedRoot) || roots[0];
+    selectRoot(target.path);
   }
 }
 
@@ -127,10 +152,11 @@ function renderRoots() {
 async function selectRoot(path) {
   if (currentRoot === path) return;
   currentRoot = path;
+  saveSetting("currentRoot", path);
   selectedPath = null;
   viewerContentEl.style.display = "none";
   placeholderEl.style.display = "flex";
-  expanded.clear();
+  loadExpanded();
   searchQuery = "";
   searchEl.value = "";
   renderRoots();
@@ -264,6 +290,7 @@ document.getElementById("browse-overlay").addEventListener("click", () => {
 
 toggleHiddenBtn.addEventListener("click", () => {
   showHidden = !showHidden;
+  saveSetting("showHidden", showHidden);
   toggleHiddenBtn.classList.toggle("active", showHidden);
   loadTree();
 });
@@ -308,6 +335,7 @@ function countMatches(node, query) {
 function toggleExpand(path) {
   if (expanded.has(path)) expanded.delete(path);
   else expanded.add(path);
+  saveExpanded();
   renderTree();
 }
 
@@ -315,6 +343,20 @@ function selectFile(path) {
   selectedPath = path;
   renderTree();
   loadFile(path);
+}
+
+function renderTokens(tokens) {
+  const lines = tokens.map((line, i) => {
+    const spans = line.map(t => {
+      const escaped = t.content
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      return `<span style="color:${t.color}">${escaped}</span>`;
+    }).join("");
+    return `<span class="line">${spans}</span>`;
+  });
+  return `<pre class="shiki"><code>${lines.join("\n")}</code></pre>`;
 }
 
 async function loadFile(path) {
@@ -326,7 +368,11 @@ async function loadFile(path) {
     const res = await fetch(`/api/read?path=${encodeURIComponent(path)}`);
     if (!res.ok) throw new Error("Failed to read file");
     const data = await res.json();
-    viewerBodyEl.textContent = data.content;
+    if (data.tokens) {
+      viewerBodyEl.innerHTML = renderTokens(data.tokens);
+    } else {
+      viewerBodyEl.textContent = data.content;
+    }
   } catch {
     viewerBodyEl.textContent = "Error reading file";
   }
@@ -453,5 +499,8 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---- Init ----
+
+showHidden = loadSetting("showHidden", false);
+toggleHiddenBtn.classList.toggle("active", showHidden);
 
 loadRoots();

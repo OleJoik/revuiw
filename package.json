@@ -1,0 +1,8 @@
+{
+  "name": "revuiw",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "shiki": "4.3.1"
+  }
+}
