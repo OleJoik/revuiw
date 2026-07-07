@@ -4,23 +4,8 @@ import { Viewer } from "./components/Viewer";
 import { OpenCodePanel } from "./components/OpenCodePanel";
 import { SelectionChat } from "./components/SelectionChat";
 import { useSetting } from "./hooks";
+import type { Panel } from "./types";
 import type { SelectionContext, SelectionThread } from "./opencode";
-
-export interface RootEntry {
-  path: string;
-  label: string;
-  type: "git" | "dir";
-  branch?: string;
-}
-
-export interface TreeNode {
-  name: string;
-  type: "file" | "directory";
-  path: string;
-  children?: TreeNode[];
-}
-
-export type Panel = "sidebar" | "viewer" | "chat";
 
 let threadSeq = 0;
 

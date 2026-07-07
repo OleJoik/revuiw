@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSetting } from "../hooks";
-import type { RootEntry, TreeNode } from "../App";
+import type { RootEntry, TreeNode } from "../types";
 
 interface Props {
   open: boolean;
