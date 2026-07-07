@@ -1,8 +1,6 @@
 #!/bin/bash
-# Install dependencies if needed
-if [ ! -d "node_modules" ]; then
-  bun install
-fi
+# Always install/sync dependencies (fast no-op if lockfile matches)
+bun install
 
 # Start opencode server in the background
 opencode serve --port 4096 --hostname 127.0.0.1 &
