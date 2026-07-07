@@ -446,12 +446,6 @@ html, body, #root {
   opacity: 1;
 }
 
-.viewer-body.rel-numbers .cursor-line .line-number {
-  text-align: left;
-  padding-left: 1.5ch;
-  padding-right: 0.5ch;
-}
-
 .viewer-body .line-content {
   min-width: 0;
 }
