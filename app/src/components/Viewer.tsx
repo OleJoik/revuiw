@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { layout, prepare } from "@chenglou/pretext";
 import { useSetting } from "../hooks";
 
 interface Props {
@@ -8,111 +9,195 @@ interface Props {
   onFocus: () => void;
 }
 
+type Token = { content: string; color?: string };
+type RowMetric = { top: number; height: number };
+
 const LINE_HEIGHT = 18; // 12px font * 1.5 line-height
-const PRE_PAD_TOP = 12; // padding-top on <pre>
+const PRE_PAD_TOP = 12;
+const PRE_PAD_BOTTOM = 12;
+const LINE_NUMBER_WIDTH = 9 * 7.2; // 9ch at 12px monospace, used only for wrap-width math.
+const CODE_PAD_LEFT = LINE_NUMBER_WIDTH;
+const CODE_PAD_RIGHT = 16;
+const TAB_SIZE = 2;
+const OVERSCAN_PX = 600;
+
+function clampLine(line: number, count: number) {
+  if (count <= 0) return 0;
+  return Math.max(0, Math.min(count - 1, line));
+}
+
+function expandTabs(line: string) {
+  let column = 0;
+  let out = "";
+
+  for (const char of line) {
+    if (char === "\t") {
+      const spaces = TAB_SIZE - (column % TAB_SIZE);
+      out += " ".repeat(spaces);
+      column += spaces;
+    } else {
+      out += char;
+      column += 1;
+    }
+  }
+
+  return out;
+}
+
+function buildFixedMetrics(count: number): RowMetric[] {
+  return Array.from({ length: count }, (_, i) => ({
+    top: PRE_PAD_TOP + i * LINE_HEIGHT,
+    height: LINE_HEIGHT,
+  }));
+}
+
+function buildWrappedMetrics(lines: string[], width: number, font: string): RowMetric[] {
+  let top = PRE_PAD_TOP;
+
+  return lines.map(line => {
+    const prepared = prepare(expandTabs(line), font, { whiteSpace: "pre-wrap" });
+    const measured = layout(prepared, width, LINE_HEIGHT);
+    const height = Math.max(1, measured.lineCount) * LINE_HEIGHT;
+    const metric = { top, height };
+    top += height;
+    return metric;
+  });
+}
+
+function totalHeight(metrics: RowMetric[]) {
+  const last = metrics[metrics.length - 1];
+  return last ? last.top + last.height + PRE_PAD_BOTTOM : PRE_PAD_TOP + PRE_PAD_BOTTOM;
+}
+
+function findLineAtOffset(metrics: RowMetric[], y: number) {
+  let lo = 0;
+  let hi = metrics.length - 1;
+  let answer = 0;
+
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (metrics[mid].top + metrics[mid].height <= y) {
+      lo = mid + 1;
+    } else {
+      answer = mid;
+      hi = mid - 1;
+    }
+  }
+
+  return answer;
+}
+
+function visibleRange(metrics: RowMetric[], scrollTop: number, viewportHeight: number) {
+  if (metrics.length === 0) return { start: 0, end: 0 };
+
+  const start = findLineAtOffset(metrics, Math.max(0, scrollTop - OVERSCAN_PX));
+  const end = Math.min(
+    metrics.length,
+    findLineAtOffset(metrics, scrollTop + viewportHeight + OVERSCAN_PX) + 1,
+  );
+
+  return { start, end };
+}
+
+function renderTokenLine(line: Token[]) {
+  return line.map((token, i) => (
+    <span key={i} style={token.color ? { color: token.color } : undefined}>
+      {token.content}
+    </span>
+  ));
+}
 
 export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
-  const [content, setContent] = useState<string>("");
-  const [tokens, setTokens] = useState<any[][] | null>(null);
+  const [content, setContent] = useState("");
+  const [tokens, setTokens] = useState<Token[][] | null>(null);
   const [loading, setLoading] = useState(false);
   const [wrap, setWrap] = useSetting("viewer:wrap", false);
   const [relNum, setRelNum] = useSetting("viewer:relnumber", false);
+  const [cursorLine, setCursorLine] = useState(0);
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 0, width: 0 });
   const bodyRef = useRef<HTMLDivElement>(null);
-  const cursorElRef = useRef<HTMLDivElement>(null);
-  const gutterRef = useRef<HTMLPreElement>(null);
   const cursorRef = useRef(0);
-  const relNumRef = useRef(relNum);
-  relNumRef.current = relNum;
 
-  const lineCount = tokens ? tokens.length : content.split("\n").length;
-  const lineCountRef = useRef(lineCount);
-  lineCountRef.current = lineCount;
+  const plainLines = useMemo(() => content.split("\n"), [content]);
+  const lines = useMemo(
+    () => tokens?.map(line => line.map(token => token.content).join("")) ?? plainLines,
+    [plainLines, tokens],
+  );
+  const lineCount = lines.length;
+  const maxLineLength = useMemo(() => Math.max(1, ...lines.map(line => expandTabs(line).length)), [lines]);
+  const wrapWidth = Math.max(1, viewport.width - CODE_PAD_LEFT - CODE_PAD_RIGHT);
 
-  // Render only visible gutter numbers. Full-file relative gutters are too expensive.
-  const updateGutter = useCallback((cursor: number) => {
-    const el = gutterRef.current;
-    const body = bodyRef.current;
-    if (!el || !body) return;
-    const count = lineCountRef.current;
-    const rel = relNumRef.current;
-    const first = Math.max(0, Math.floor((body.scrollTop - PRE_PAD_TOP) / LINE_HEIGHT) - 2);
-    const last = Math.min(count - 1, Math.ceil((body.scrollTop + body.clientHeight - PRE_PAD_TOP) / LINE_HEIGHT) + 2);
-    const lines = new Array(last - first + 1);
+  const metrics = useMemo(() => {
+    if (!wrap) return buildFixedMetrics(lineCount);
+    return buildWrappedMetrics(lines, wrapWidth, "12px JetBrains Mono, Fira Code, Cascadia Code, SF Mono, Consolas, monospace");
+  }, [lineCount, lines, wrap, wrapWidth]);
 
-    for (let i = first; i <= last; i++) {
-      lines[i - first] = rel
-        ? (i === cursor ? String(i + 1) : String(Math.abs(i - cursor)))
-        : String(i + 1);
-    }
-    el.style.transform = `translateY(${PRE_PAD_TOP + first * LINE_HEIGHT}px)`;
-    el.textContent = lines.join("\n");
-  }, []);
+  const range = useMemo(
+    () => visibleRange(metrics, viewport.scrollTop, viewport.height),
+    [metrics, viewport.height, viewport.scrollTop],
+  );
 
-  // Position the cursor overlay
-  const positionCursor = useCallback((line: number) => {
-    const el = cursorElRef.current;
-    if (el) {
-      el.style.transform = `translateY(${PRE_PAD_TOP + line * LINE_HEIGHT}px)`;
-    }
-  }, []);
+  const height = totalHeight(metrics);
+  const cursorMetric = metrics[cursorLine];
 
-  // Ensure cursor line is visible in the scroll viewport
   const ensureVisible = useCallback((line: number) => {
     const body = bodyRef.current;
-    if (!body) return;
-    const elTop = PRE_PAD_TOP + line * LINE_HEIGHT;
-    const elBottom = elTop + LINE_HEIGHT;
-    const { scrollTop, clientHeight } = body;
+    const metric = metrics[line];
+    if (!body || !metric) return;
 
-    if (elTop < scrollTop) {
-      body.scrollTop = elTop;
-    } else if (elBottom > scrollTop + clientHeight) {
-      body.scrollTop = elBottom - clientHeight;
+    const top = metric.top;
+    const bottom = metric.top + metric.height;
+    if (top < body.scrollTop) {
+      body.scrollTop = top;
+    } else if (bottom > body.scrollTop + body.clientHeight) {
+      body.scrollTop = bottom - body.clientHeight;
     }
-  }, []);
+  }, [metrics]);
 
-  // Move cursor
   const moveCursor = useCallback((next: number) => {
-    const count = lineCountRef.current;
-    if (next < 0) next = 0;
-    if (next >= count) next = count - 1;
-    if (next === cursorRef.current) return;
-    cursorRef.current = next;
-    positionCursor(next);
-    ensureVisible(next);
-    if (relNumRef.current) updateGutter(next);
-  }, [positionCursor, ensureVisible, updateGutter]);
+    const line = clampLine(next, lineCount);
+    if (line === cursorRef.current) return;
 
-  // Initial gutter render
+    cursorRef.current = line;
+    ensureVisible(line);
+    setCursorLine(line);
+  }, [ensureVisible, lineCount]);
+
   useEffect(() => {
     cursorRef.current = 0;
-    positionCursor(0);
-    updateGutter(0);
-  }, [filePath, tokens, content, positionCursor, updateGutter]);
+    setCursorLine(0);
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [filePath]);
 
-  // Show/hide cursor overlay when focus changes
   useEffect(() => {
-    const el = cursorElRef.current;
-    if (el) {
-      el.style.opacity = focused ? "1" : "0";
-    }
-  }, [focused]);
+    const line = clampLine(cursorRef.current, lineCount);
+    cursorRef.current = line;
+    setCursorLine(line);
+  }, [lineCount]);
 
-  // Re-apply gutter when relNum mode toggles
-  useEffect(() => {
-    updateGutter(cursorRef.current);
-  }, [relNum, updateGutter]);
-
-  // Keep virtual gutter aligned when native scrollbars/mouse wheel move the viewport.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
-    const onScroll = () => updateGutter(cursorRef.current);
-    body.addEventListener("scroll", onScroll);
-    return () => body.removeEventListener("scroll", onScroll);
-  }, [updateGutter]);
 
-  // Vim-like keyboard navigation
+    const syncViewport = () => {
+      setViewport({
+        scrollTop: body.scrollTop,
+        height: body.clientHeight,
+        width: body.clientWidth,
+      });
+    };
+
+    syncViewport();
+    body.addEventListener("scroll", syncViewport, { passive: true });
+    const resizeObserver = new ResizeObserver(syncViewport);
+    resizeObserver.observe(body);
+
+    return () => {
+      body.removeEventListener("scroll", syncViewport);
+      resizeObserver.disconnect();
+    };
+  }, []);
+
   useEffect(() => {
     if (!focused || !filePath || loading) return;
 
@@ -121,19 +206,15 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
 
       if (e.ctrlKey && e.key === "d") {
         e.preventDefault();
-        const body = bodyRef.current;
-        if (!body) return;
-        const half = Math.floor(body.clientHeight / LINE_HEIGHT / 2);
-        moveCursor(cursorRef.current + half);
+        const halfPage = Math.max(1, Math.floor((bodyRef.current?.clientHeight ?? LINE_HEIGHT) / LINE_HEIGHT / 2));
+        moveCursor(cursorRef.current + halfPage);
         return;
       }
 
       if (e.ctrlKey && e.key === "u") {
         e.preventDefault();
-        const body = bodyRef.current;
-        if (!body) return;
-        const half = Math.floor(body.clientHeight / LINE_HEIGHT / 2);
-        moveCursor(cursorRef.current - half);
+        const halfPage = Math.max(1, Math.floor((bodyRef.current?.clientHeight ?? LINE_HEIGHT) / LINE_HEIGHT / 2));
+        moveCursor(cursorRef.current - halfPage);
         return;
       }
 
@@ -153,16 +234,12 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
         case "h":
         case "ArrowLeft":
           e.preventDefault();
-          if (bodyRef.current) {
-            bodyRef.current.scrollLeft = Math.max(0, bodyRef.current.scrollLeft - 40);
-          }
+          if (bodyRef.current) bodyRef.current.scrollLeft = Math.max(0, bodyRef.current.scrollLeft - 40);
           break;
         case "l":
         case "ArrowRight":
           e.preventDefault();
-          if (bodyRef.current) {
-            bodyRef.current.scrollLeft += 40;
-          }
+          if (bodyRef.current) bodyRef.current.scrollLeft += 40;
           break;
         case "g":
           e.preventDefault();
@@ -170,49 +247,65 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
           break;
         case "G":
           e.preventDefault();
-          moveCursor(lineCountRef.current - 1);
+          moveCursor(lineCount - 1);
           break;
       }
     };
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [focused, filePath, loading, moveCursor]);
+  }, [filePath, focused, lineCount, loading, moveCursor]);
 
   useEffect(() => {
-    if (!filePath) { setContent(""); setTokens(null); return; }
+    if (!filePath) {
+      setContent("");
+      setTokens(null);
+      return;
+    }
+
+    let cancelled = false;
     setLoading(true);
     setTokens(null);
 
     fetch(`/api/read?path=${encodeURIComponent(filePath)}`)
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return;
         setContent(data.content || "");
         setLoading(false);
 
         if (data.lang) {
           fetch(`/api/highlight?path=${encodeURIComponent(filePath)}`)
             .then(r => r.json())
-            .then(hl => { if (hl.tokens) setTokens(hl.tokens); })
+            .then(hl => {
+              if (!cancelled && hl.tokens) setTokens(hl.tokens);
+            })
             .catch(() => {});
         }
       })
-      .catch(() => { setContent("Error reading file"); setLoading(false); });
+      .catch(() => {
+        if (!cancelled) {
+          setContent("Error reading file");
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [filePath]);
 
-  // Click to move cursor
   const handleLineClick = useCallback((e: React.MouseEvent) => {
     const body = bodyRef.current;
     if (!body) return;
+
     const rect = body.getBoundingClientRect();
-    const y = e.clientY - rect.top + body.scrollTop - PRE_PAD_TOP;
-    const line = Math.floor(y / LINE_HEIGHT);
-    if (line >= 0 && line < lineCountRef.current) {
-      cursorRef.current = line;
-      positionCursor(line);
-      if (relNumRef.current) updateGutter(line);
-    }
-  }, [positionCursor, updateGutter]);
+    const y = e.clientY - rect.top + body.scrollTop;
+    const line = findLineAtOffset(metrics, y);
+    const next = clampLine(line, lineCount);
+    cursorRef.current = next;
+    setCursorLine(next);
+  }, [lineCount, metrics]);
 
   if (!filePath) {
     return (
@@ -221,8 +314,6 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
       </div>
     );
   }
-
-  const plainLines = !tokens ? content.split("\n") : null;
 
   return (
     <div className={`viewer ${focused ? "panel-focused" : ""}`} onMouseDown={onFocus}>
@@ -251,22 +342,43 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
         ref={bodyRef}
         onMouseDown={handleLineClick}
       >
-        <div className="viewer-cursor" ref={cursorElRef} />
-        <pre className="viewer-gutter" ref={gutterRef} />
         {loading ? (
           <div className="viewer-loading">Loading...</div>
-        ) : tokens ? (
-          <pre className="shiki viewer-code"><code>{tokens.map((line, i) => (
-            <span className="line" key={i}>
-              {line.map((t: any, j: number) => (
-                <span key={j} style={{ color: t.color }}>{t.content}</span>
-              ))}
-            </span>
-          ))}</code></pre>
         ) : (
-          <pre className="viewer-code"><code>{plainLines!.map((line, i) => (
-            <span className="line" key={i}>{line}</span>
-          ))}</code></pre>
+          <div className="viewer-sizer" style={{ height, minWidth: wrap ? undefined : `calc(${maxLineLength}ch + 9ch + 16px)` }}>
+            {cursorMetric && (
+              <div
+                className="viewer-cursor"
+                style={{
+                  top: cursorMetric.top,
+                  height: cursorMetric.height,
+                  opacity: focused ? 1 : 0,
+                }}
+              />
+            )}
+            <pre className={`viewer-code ${tokens ? "shiki" : ""}`}>
+              <code>
+                {Array.from({ length: range.end - range.start }, (_, offset) => {
+                  const i = range.start + offset;
+                  const metric = metrics[i];
+                  const isCursor = i === cursorLine;
+                  const lineNumber = relNum && !isCursor ? Math.abs(i - cursorLine) : i + 1;
+                  return (
+                    <span
+                      className={`line ${isCursor ? "cursor-line" : ""}`}
+                      key={i}
+                      style={{ top: metric.top, minHeight: metric.height }}
+                    >
+                      <span className="line-number">{lineNumber}</span>
+                      <span className="line-content">
+                        {tokens ? renderTokenLine(tokens[i]) : plainLines[i]}
+                      </span>
+                    </span>
+                  );
+                })}
+              </code>
+            </pre>
+          </div>
         )}
       </div>
     </div>

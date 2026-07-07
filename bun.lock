@@ -5,6 +5,7 @@
     "": {
       "name": "revuiw",
       "dependencies": {
+        "@chenglou/pretext": "^0.0.6",
         "@opencode-ai/sdk": "^1.17.14",
         "@types/dompurify": "^3.2.0",
         "dompurify": "^3.4.11",
@@ -20,6 +21,8 @@
     },
   },
   "packages": {
+    "@chenglou/pretext": ["@chenglou/pretext@0.0.6", "", {}, "sha512-U10s4tFeyu3oVHfXuNWwZSKqHXefhaigpcBkGj60qQFRJ+yUoQ+ez3cGJelP7BWDAB58HCgjcTSmOcg+77afBQ=="],
+
     "@opencode-ai/sdk": ["@opencode-ai/sdk@1.17.14", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-ycSYSF0kuJmNUP38VYnsFEoUWPyjlLjAZFPtYuMt+32Tz+NqVsAPcqK3MPBRd5v+GChjAyApB/y56i7Ub08IAg=="],
 
     "@shikijs/core": ["@shikijs/core@4.3.1", "", { "dependencies": { "@shikijs/primitive": "4.3.1", "@shikijs/types": "4.3.1", "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.4", "hast-util-to-html": "^9.0.5" } }, "sha512-ANMDxuaPsNMdDC1m4vfvhlDmJweMwkE5XitTwrq2rWHx5jM+dlm4MmHt2PP6t0uejfR77SuhrhJ0zEijIF/uhA=="],

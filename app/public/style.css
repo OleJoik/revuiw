@@ -356,15 +356,6 @@ html, body, #root {
   position: relative;
 }
 
-.viewer-body.wrap .viewer-code {
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.viewer-body.nowrap .viewer-code {
-  white-space: pre;
-}
-
 .viewer-body pre.shiki {
   background: transparent !important;
 }
@@ -375,44 +366,24 @@ html, body, #root {
   color: var(--fg-muted);
 }
 
-/* Viewer cursor and gutter */
+.viewer-sizer {
+  position: relative;
+  min-width: 100%;
+}
+
 .viewer-cursor {
   position: absolute;
-  top: 0;
   left: 0;
   right: 0;
-  height: 18px;
   background: rgba(136, 176, 255, 0.08);
   border-left: 2px solid var(--accent);
   pointer-events: none;
-  will-change: transform;
-  z-index: 2;
-}
-
-.viewer-gutter {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 5ch;
-  height: 100%;
-  margin: 0;
-  padding: 12px 1ch 12px 1ch;
-  font-family: var(--font);
-  font-size: 12px;
-  line-height: 1.5;
-  text-align: right;
-  color: var(--fg-muted);
-  opacity: 0.5;
-  user-select: none;
-  pointer-events: none;
-  z-index: 3;
-  contain: strict;
-  overflow: hidden;
+  z-index: 1;
 }
 
 .viewer-body .viewer-code {
   margin: 0;
-  padding: 12px 16px 12px calc(5ch + 3ch);
+  padding: 0;
   font-family: var(--font);
   font-size: 12px;
   line-height: 1.5;
@@ -428,6 +399,46 @@ html, body, #root {
 
 .viewer-body .line {
   display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 0 16px 0 0;
+  min-height: 18px;
+}
+
+.viewer-body .line-number {
+  display: inline-block;
+  width: 9ch;
+  padding-right: 2ch;
+  text-align: right;
+  color: var(--fg-muted);
+  opacity: 0.5;
+  user-select: none;
+}
+
+.viewer-body .cursor-line .line-number {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.viewer-body.rel-numbers .cursor-line .line-number {
+  text-align: left;
+  padding-left: 1.5ch;
+  padding-right: 0.5ch;
+}
+
+.viewer-body .line-content {
+  display: inline;
+}
+
+.viewer-body.nowrap .line {
+  white-space: pre;
+}
+
+.viewer-body.wrap .line {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* ---- OpenCode Panel ---- */
