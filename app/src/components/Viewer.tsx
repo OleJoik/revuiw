@@ -13,6 +13,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [tokens, setTokens] = useState<any[][] | null>(null);
   const [loading, setLoading] = useState(false);
   const [wrap, setWrap] = useSetting("viewer:wrap", false);
+  const [relNum, setRelNum] = useSetting("viewer:relnumber", false);
   const [cursorLine, setCursorLine] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<Map<number, HTMLElement>>(new Map());
@@ -151,6 +152,13 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     else lineRefs.current.delete(i);
   }, []);
 
+  const getLineNumber = useCallback((i: number) => {
+    if (!relNum) return i + 1;
+    // Relative: cursor line shows absolute, others show distance
+    if (i === cursorLine) return i + 1;
+    return Math.abs(i - cursorLine);
+  }, [relNum, cursorLine]);
+
   if (!filePath) {
     return (
       <div className={`viewer ${focused ? "panel-focused" : ""}`} onMouseDown={onFocus}>
@@ -166,6 +174,13 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
       <div className="viewer-header">
         <span className="viewer-path">{filePath}</span>
         <div className="viewer-actions">
+          <button
+            className={`viewer-wrap-toggle ${relNum ? "active" : ""}`}
+            onClick={() => setRelNum(!relNum)}
+            title={relNum ? "Absolute line numbers" : "Relative line numbers"}
+          >
+            Rel
+          </button>
           <button
             className={`viewer-wrap-toggle ${wrap ? "active" : ""}`}
             onClick={() => setWrap(!wrap)}
@@ -186,7 +201,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
               key={i}
               ref={(el) => setLineRef(i, el)}
             >
-              <span className="line-number">{i + 1}</span>
+              <span className="line-number">{getLineNumber(i)}</span>
               {line.map((t: any, j: number) => (
                 <span key={j} style={{ color: t.color }}>{t.content}</span>
               ))}
@@ -199,7 +214,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
               key={i}
               ref={(el) => setLineRef(i, el)}
             >
-              <span className="line-number">{i + 1}</span>
+              <span className="line-number">{getLineNumber(i)}</span>
               {line}
             </span>
           ))}</code></pre>
