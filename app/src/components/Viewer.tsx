@@ -17,12 +17,30 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const lineEls = useRef<HTMLElement[]>([]);
   const cursorRef = useRef(0);
-  // State only needed to trigger re-render for relative line numbers
-  const [cursorLine, setCursorLine] = useState(0);
+  const relNumRef = useRef(relNum);
+  relNumRef.current = relNum;
 
   const lineCount = tokens ? tokens.length : content.split("\n").length;
+  const lineCountRef = useRef(lineCount);
+  lineCountRef.current = lineCount;
 
-  // Move cursor via DOM manipulation (fast, no re-render)
+  // Update line numbers in the DOM directly
+  const updateLineNumbers = useCallback((cursor: number) => {
+    const els = lineEls.current;
+    const count = lineCountRef.current;
+    const rel = relNumRef.current;
+    for (let i = 0; i < count; i++) {
+      const el = els[i];
+      if (!el) continue;
+      const numEl = el.firstElementChild as HTMLElement;
+      if (!numEl) continue;
+      numEl.textContent = rel
+        ? (i === cursor ? String(i + 1) : String(Math.abs(i - cursor)))
+        : String(i + 1);
+    }
+  }, []);
+
+  // Move cursor via DOM manipulation (no re-render)
   const moveCursor = useCallback((next: number) => {
     const prev = cursorRef.current;
     if (next === prev) return;
@@ -34,14 +52,12 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
       newEl.scrollIntoView({ block: "nearest" });
     }
     cursorRef.current = next;
-    // Only trigger re-render if relative line numbers need updating
-    setCursorLine(next);
-  }, []);
+    if (relNumRef.current) updateLineNumbers(next);
+  }, [updateLineNumbers]);
 
   // Reset cursor when file changes
   useEffect(() => {
     cursorRef.current = 0;
-    setCursorLine(0);
   }, [filePath]);
 
   // Sync cursor-line class when focus changes
@@ -54,6 +70,11 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
       el.classList.remove("cursor-line");
     }
   }, [focused]);
+
+  // Re-apply line numbers when relNum mode toggles
+  useEffect(() => {
+    updateLineNumbers(cursorRef.current);
+  }, [relNum, updateLineNumbers]);
 
   // Vim-like keyboard navigation when viewer is focused
   useEffect(() => {
@@ -149,12 +170,6 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     if (el) lineEls.current[i] = el;
   }, []);
 
-  const getLineNumber = useCallback((i: number) => {
-    if (!relNum) return i + 1;
-    if (i === cursorLine) return i + 1;
-    return Math.abs(i - cursorLine);
-  }, [relNum, cursorLine]);
-
   if (!filePath) {
     return (
       <div className={`viewer ${focused ? "panel-focused" : ""}`} onMouseDown={onFocus}>
@@ -193,12 +208,12 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
         ) : tokens ? (
           <pre className="shiki"><code>{tokens.map((line, i) => (
             <span
-              className={`line ${focused && i === cursorLine ? "cursor-line" : ""}`}
+              className="line"
               key={i}
               ref={(el) => setLineRef(i, el)}
               onMouseDown={() => moveCursor(i)}
             >
-              <span className="line-number">{getLineNumber(i)}</span>
+              <span className="line-number">{i + 1}</span>
               {line.map((t: any, j: number) => (
                 <span key={j} style={{ color: t.color }}>{t.content}</span>
               ))}
@@ -207,12 +222,12 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
         ) : (
           <pre><code>{plainLines!.map((line, i) => (
             <span
-              className={`line ${focused && i === cursorLine ? "cursor-line" : ""}`}
+              className="line"
               key={i}
               ref={(el) => setLineRef(i, el)}
               onMouseDown={() => moveCursor(i)}
             >
-              <span className="line-number">{getLineNumber(i)}</span>
+              <span className="line-number">{i + 1}</span>
               {line}
             </span>
           ))}</code></pre>
