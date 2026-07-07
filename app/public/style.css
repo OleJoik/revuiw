@@ -428,6 +428,8 @@ html, body, #root {
 
 .viewer-body.rel-numbers .cursor-line .line-number {
   text-align: left;
+  border-right: none;
+  padding-right: calc(1.5ch + 1px);
 }
 
 /* ---- OpenCode Panel ---- */
