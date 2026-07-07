@@ -407,7 +407,8 @@ html, body, #root {
 }
 
 .viewer-body .line {
-  display: block;
+  display: grid;
+  grid-template-columns: 9ch minmax(0, 1fr);
   position: absolute;
   left: 0;
   right: 0;
@@ -416,8 +417,6 @@ html, body, #root {
 }
 
 .viewer-body .line-number {
-  display: inline-block;
-  width: 9ch;
   padding-right: 2ch;
   text-align: right;
   color: var(--fg-muted);
@@ -446,7 +445,7 @@ html, body, #root {
 }
 
 .viewer-body .line-content {
-  display: inline;
+  min-width: 0;
 }
 
 .viewer-body.nowrap .line {
