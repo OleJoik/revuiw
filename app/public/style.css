@@ -353,6 +353,11 @@ html, body, #root {
   flex: 1;
   overflow: auto;
   background: var(--bg);
+  scrollbar-width: none;
+}
+
+.viewer-body::-webkit-scrollbar {
+  display: none;
 }
 
 .viewer-body.wrap pre,
@@ -380,29 +385,38 @@ html, body, #root {
   background: var(--bg) !important;
 }
 
-.viewer-body::-webkit-scrollbar {
-  width: 14px;
-  height: 14px;
-}
-
-.viewer-body::-webkit-scrollbar-track {
-  background: var(--bg-alt);
-}
-
-.viewer-body::-webkit-scrollbar-thumb {
-  background: var(--accent);
-  border-radius: 7px;
-  border: 3px solid var(--bg-alt);
-}
-
-.viewer-body::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--accent) 80%, white);
-}
-
 .viewer-loading {
   padding: 20px;
   text-align: center;
   color: var(--fg-muted);
+}
+
+/* Custom horizontal scrollbar */
+.viewer-hscroll-track {
+  height: 10px;
+  background: var(--bg-alt);
+  border-top: 1px solid var(--border);
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.viewer-hscroll-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 4px;
+  background: var(--accent);
+  cursor: grab;
+  transition: background 0.15s;
+}
+
+.viewer-hscroll-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 80%, white);
+}
+
+.viewer-hscroll-thumb:active {
+  cursor: grabbing;
 }
 
 /* Viewer cursor line */
