@@ -100,6 +100,11 @@ export function OpenCodePanel({ open, onToggle }: Props) {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Refocus input after loading completes
+  useEffect(() => {
+    if (!loading) inputRef.current?.focus();
+  }, [loading]);
+
   // Delegated click handler for copy buttons in rendered markdown
   const handleMessagesClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -165,7 +170,6 @@ export function OpenCodePanel({ open, onToggle }: Props) {
     }
 
     setLoading(false);
-    inputRef.current?.focus();
   };
 
   // Collapsed state: just show tab
