@@ -163,6 +163,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
   const [scrollOff, setScrollOff] = useSetting("viewer:scrolloff", 5);
   const [cursorLine, setCursorLine] = useState(0);
   const [visualAnchor, setVisualAnchor] = useState<number | null>(null);
+  const [anchorStackIndex, setAnchorStackIndex] = useState(0);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0, width: 0 });
   const bodyRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef(0);
@@ -292,6 +293,24 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
     return { x, y };
   }, [metrics]);
 
+  const cursorAnchors = useMemo(() => {
+    const line = cursorLine + 1;
+    return anchors
+      .filter(a => a.startLine <= line && line <= a.endLine)
+      .sort((a, b) => {
+        const aSize = a.endLine - a.startLine;
+        const bSize = b.endLine - b.startLine;
+        return aSize - bSize || a.startLine - b.startLine || a.id.localeCompare(b.id);
+      });
+  }, [anchors, cursorLine]);
+
+  const activeAnchorIndex = cursorAnchors.length === 0 ? -1 : anchorStackIndex % cursorAnchors.length;
+  const activeCursorAnchor = activeAnchorIndex >= 0 ? cursorAnchors[activeAnchorIndex] : null;
+
+  useEffect(() => {
+    setAnchorStackIndex(0);
+  }, [cursorLine, filePath]);
+
   useEffect(() => {
     if (!focused || !filePath || loading) return;
 
@@ -330,6 +349,23 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
       }
 
       if (e.ctrlKey) return;
+
+      if (activeCursorAnchor && e.key === "Enter") {
+        e.preventDefault();
+        countRef.current = "";
+        onAnchorClick?.(
+          activeCursorAnchor.id,
+          placementForRange(activeCursorAnchor.startLine - 1, activeCursorAnchor.endLine - 1),
+        );
+        return;
+      }
+
+      if (cursorAnchors.length > 1 && (e.key === "]" || e.key === "[")) {
+        e.preventDefault();
+        countRef.current = "";
+        setAnchorStackIndex(prev => (prev + (e.key === "]" ? 1 : -1) + cursorAnchors.length) % cursorAnchors.length);
+        return;
+      }
 
       // Accumulate digit keys into count prefix (0 only if count already started)
       if (e.key >= "1" && e.key <= "9") {
@@ -415,7 +451,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onOpenSelectionChat, placementForRange]);
+  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onOpenSelectionChat, placementForRange, activeCursorAnchor, cursorAnchors, onAnchorClick]);
 
   useEffect(() => {
     if (!filePath) {
@@ -536,9 +572,21 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
               const endMetric = metrics[a.endLine - 1] ?? startMetric;
               if (!startMetric) return null;
               const height = endMetric.top + endMetric.height - startMetric.top;
+              const isActive = activeCursorAnchor?.id === a.id;
               return (
                 <React.Fragment key={a.id}>
-                  {a.open && <div className="viewer-thread-highlight" style={{ top: startMetric.top, height }} />}
+                  {(a.open || isActive) && (
+                    <div
+                      className={`viewer-thread-highlight ${a.open ? "open" : "preview"}`}
+                      style={{ top: startMetric.top, height }}
+                    />
+                  )}
+                  {isActive && (
+                    <div className="viewer-thread-hint" style={{ top: startMetric.top + 2 }}>
+                      <span>{a.open ? "Enter close" : "Enter open"}</span>
+                      {cursorAnchors.length > 1 && <span>{activeAnchorIndex + 1}/{cursorAnchors.length} [ ]</span>}
+                    </div>
+                  )}
                   <button
                     className={`viewer-anchor ${a.open ? "open" : ""}`}
                     style={{ top: startMetric.top, height }}

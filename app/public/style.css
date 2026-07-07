@@ -1021,10 +1021,51 @@ html, body, #root {
   left: 9ch;
   right: 0;
   pointer-events: none;
+  z-index: 0;
+  animation: thread-highlight-in 120ms ease-out;
+}
+
+.viewer-thread-highlight.preview {
+  background: rgba(166, 227, 161, 0.045);
+  border-left: 1px solid rgba(166, 227, 161, 0.35);
+}
+
+.viewer-thread-highlight.open {
   background: rgba(137, 180, 250, 0.11);
   border: 1px solid rgba(137, 180, 250, 0.5);
   border-left-width: 2px;
-  z-index: 0;
+}
+
+.viewer-thread-hint {
+  position: absolute;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border: 1px solid rgba(166, 227, 161, 0.35);
+  border-radius: 4px;
+  background: rgba(24, 24, 37, 0.88);
+  color: var(--green);
+  font-size: 10px;
+  line-height: 1.3;
+  pointer-events: none;
+  z-index: 4;
+  animation: thread-hint-in 120ms ease-out;
+}
+
+.viewer-thread-hint span + span {
+  color: var(--fg-muted);
+}
+
+@keyframes thread-highlight-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes thread-hint-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .viewer-anchor {
