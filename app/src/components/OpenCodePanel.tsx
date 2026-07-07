@@ -30,6 +30,8 @@ function renderMarkdown(text: string): string {
 interface Props {
   open: boolean;
   onToggle: () => void;
+  focused: boolean;
+  onFocus: () => void;
 }
 
 interface Session {
@@ -50,7 +52,7 @@ interface Message {
   parts?: MessagePart[];
 }
 
-export function OpenCodePanel({ open, onToggle }: Props) {
+export function OpenCodePanel({ open, onToggle, focused, onFocus }: Props) {
   const [width, setWidth] = useSetting("oc:width", 340);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
@@ -102,8 +104,13 @@ export function OpenCodePanel({ open, onToggle }: Props) {
 
   // Refocus input after loading completes
   useEffect(() => {
-    if (!loading) inputRef.current?.focus();
+    if (!loading && focused) inputRef.current?.focus();
   }, [loading]);
+
+  // Focus input when panel receives focus
+  useEffect(() => {
+    if (focused && open && !loading) inputRef.current?.focus();
+  }, [focused]);
 
   // Delegated click handler for copy buttons in rendered markdown
   const handleMessagesClick = useCallback((e: React.MouseEvent) => {
@@ -184,7 +191,7 @@ export function OpenCodePanel({ open, onToggle }: Props) {
   });
 
   return (
-    <div className="oc-panel" style={{ width }}>
+    <div className={`oc-panel ${focused ? "panel-focused" : ""}`} style={{ width }} onMouseDown={onFocus}>
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} />
       <div className="oc-header">
         <span>OpenCode</span>

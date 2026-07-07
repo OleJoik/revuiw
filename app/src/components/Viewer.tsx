@@ -4,9 +4,11 @@ import { useSetting } from "../hooks";
 interface Props {
   filePath: string | null;
   onClose: () => void;
+  focused: boolean;
+  onFocus: () => void;
 }
 
-export function Viewer({ filePath, onClose }: Props) {
+export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [content, setContent] = useState<string>("");
   const [tokens, setTokens] = useState<any[][] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,14 +38,14 @@ export function Viewer({ filePath, onClose }: Props) {
 
   if (!filePath) {
     return (
-      <div className="viewer">
+      <div className={`viewer ${focused ? "panel-focused" : ""}`} onMouseDown={onFocus}>
         <div className="viewer-placeholder">Select a file to view its contents</div>
       </div>
     );
   }
 
   return (
-    <div className="viewer">
+    <div className={`viewer ${focused ? "panel-focused" : ""}`} onMouseDown={onFocus}>
       <div className="viewer-header">
         <span className="viewer-path">{filePath}</span>
         <div className="viewer-actions">

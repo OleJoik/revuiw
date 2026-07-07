@@ -36,6 +36,21 @@ html, body, #root {
   position: relative;
 }
 
+/* ---- Panel focus indicator ---- */
+
+.panel-focused {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* ---- Tree cursor ---- */
+
+.tree-node.cursor {
+  background: var(--bg-hover);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
 /* ---- Resize handles ---- */
 
 .resize-handle {

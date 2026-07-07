@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSetting } from "../hooks";
 import type { RootEntry, TreeNode } from "../App";
 
@@ -6,9 +6,27 @@ interface Props {
   open: boolean;
   onToggle: () => void;
   onSelectFile: (path: string) => void;
+  focused: boolean;
+  onFocus: () => void;
 }
 
-export function Sidebar({ open, onToggle, onSelectFile }: Props) {
+// Flatten visible tree nodes for keyboard navigation
+function flattenVisible(node: TreeNode, expanded: Set<string>, isRoot: boolean, search: string): TreeNode[] {
+  const result: TreeNode[] = [];
+
+  if (search && !matchesSearch(node, search)) return result;
+  if (!isRoot) result.push(node);
+
+  if (node.type === "directory" && (isRoot || expanded.has(node.path))) {
+    for (const child of node.children || []) {
+      result.push(...flattenVisible(child, expanded, false, search));
+    }
+  }
+
+  return result;
+}
+
+export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Props) {
   const [width, setWidth] = useSetting("sidebar:width", 300);
   const [roots, setRoots] = useState<RootEntry[]>([]);
   const [currentRoot, setCurrentRoot] = useSetting<string | null>("currentRoot", null);
@@ -16,7 +34,15 @@ export function Sidebar({ open, onToggle, onSelectFile }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [showHidden, setShowHidden] = useSetting("showHidden", false);
+  const [cursor, setCursor] = useState<string | null>(null);
   const dragging = useRef(false);
+  const treeRef = useRef<HTMLDivElement>(null);
+
+  // Flatten visible nodes for keyboard cursor movement
+  const visibleNodes = useMemo(() => {
+    if (!tree) return [];
+    return flattenVisible(tree, expanded, true, search.toLowerCase());
+  }, [tree, expanded, search]);
 
   // Load roots
   useEffect(() => {
@@ -58,6 +84,89 @@ export function Sidebar({ open, onToggle, onSelectFile }: Props) {
     saveExpanded(next);
   };
 
+  // Keyboard navigation when focused
+  useEffect(() => {
+    if (!focused || !open) return;
+
+    const handleKey = (e: KeyboardEvent) => {
+      // Don't capture if user is typing in search
+      if (document.activeElement?.tagName === "INPUT") {
+        if (e.key === "Escape") {
+          (document.activeElement as HTMLElement).blur();
+          e.preventDefault();
+        }
+        return;
+      }
+
+      const cursorIdx = cursor ? visibleNodes.findIndex(n => n.path === cursor) : -1;
+
+      switch (e.key) {
+        case "j":
+        case "ArrowDown": {
+          e.preventDefault();
+          const next = Math.min(cursorIdx + 1, visibleNodes.length - 1);
+          if (visibleNodes[next]) setCursor(visibleNodes[next].path);
+          break;
+        }
+        case "k":
+        case "ArrowUp": {
+          e.preventDefault();
+          const next = Math.max(cursorIdx - 1, 0);
+          if (visibleNodes[next]) setCursor(visibleNodes[next].path);
+          break;
+        }
+        case "l":
+        case "ArrowRight": {
+          e.preventDefault();
+          if (cursor) {
+            const node = visibleNodes.find(n => n.path === cursor);
+            if (node?.type === "directory" && !expanded.has(cursor)) {
+              toggleExpand(cursor);
+            }
+          }
+          break;
+        }
+        case "h":
+        case "ArrowLeft": {
+          e.preventDefault();
+          if (cursor) {
+            const node = visibleNodes.find(n => n.path === cursor);
+            if (node?.type === "directory" && expanded.has(cursor)) {
+              toggleExpand(cursor);
+            }
+          }
+          break;
+        }
+        case "Enter": {
+          e.preventDefault();
+          if (cursor) {
+            const node = visibleNodes.find(n => n.path === cursor);
+            if (node?.type === "file") onSelectFile(cursor);
+            else if (node?.type === "directory") toggleExpand(cursor);
+          }
+          break;
+        }
+        case "/": {
+          // Focus search
+          e.preventDefault();
+          const input = treeRef.current?.parentElement?.querySelector<HTMLInputElement>(".sidebar-search input");
+          input?.focus();
+          break;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [focused, open, cursor, visibleNodes, expanded]);
+
+  // Scroll cursor into view
+  useEffect(() => {
+    if (!cursor || !treeRef.current) return;
+    const el = treeRef.current.querySelector(`[data-path="${CSS.escape(cursor)}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [cursor]);
+
   // Resize
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -92,7 +201,7 @@ export function Sidebar({ open, onToggle, onSelectFile }: Props) {
   }
 
   return (
-    <div className="sidebar" style={{ width }}>
+    <div className={`sidebar ${focused ? "panel-focused" : ""}`} style={{ width }} onMouseDown={onFocus}>
       <div className="sidebar-header">
         <select
           className="sidebar-root-select"
@@ -121,7 +230,7 @@ export function Sidebar({ open, onToggle, onSelectFile }: Props) {
           title="Show hidden files"
         >.*</button>
       </div>
-      <div className="sidebar-tree">
+      <div className="sidebar-tree" ref={treeRef}>
         {tree ? (
           <TreeView
             node={tree}
@@ -130,6 +239,8 @@ export function Sidebar({ open, onToggle, onSelectFile }: Props) {
             onToggle={toggleExpand}
             onSelect={onSelectFile}
             search={search.toLowerCase()}
+            cursor={cursor}
+            onCursor={setCursor}
             isRoot
           />
         ) : (
@@ -144,7 +255,7 @@ export function Sidebar({ open, onToggle, onSelectFile }: Props) {
 }
 
 function TreeView({
-  node, depth, expanded, onToggle, onSelect, search, isRoot,
+  node, depth, expanded, onToggle, onSelect, search, cursor, onCursor, isRoot,
 }: {
   node: TreeNode;
   depth: number;
@@ -152,11 +263,14 @@ function TreeView({
   onToggle: (path: string) => void;
   onSelect: (path: string) => void;
   search: string;
+  cursor: string | null;
+  onCursor: (path: string) => void;
   isRoot?: boolean;
 }) {
   const isDir = node.type === "directory";
   const isOpen = expanded.has(node.path);
   const matches = search ? matchesSearch(node, search) : true;
+  const isCursor = cursor === node.path;
 
   if (search && !matches) return null;
 
@@ -164,9 +278,10 @@ function TreeView({
     <>
       {!isRoot && (
         <div
-          className={`tree-node ${isDir ? "dir" : "file"}`}
+          className={`tree-node ${isDir ? "dir" : "file"} ${isCursor ? "cursor" : ""}`}
           style={{ paddingLeft: depth * 14 + 6 }}
-          onClick={() => isDir ? onToggle(node.path) : onSelect(node.path)}
+          data-path={node.path}
+          onClick={() => { onCursor(node.path); isDir ? onToggle(node.path) : onSelect(node.path); }}
         >
           <span className={`tree-caret ${isDir ? (isOpen ? "open" : "") : "leaf"}`}>
             {isDir ? "\u25B8" : ""}
@@ -183,6 +298,8 @@ function TreeView({
           onToggle={onToggle}
           onSelect={onSelect}
           search={search}
+          cursor={cursor}
+          onCursor={onCursor}
         />
       ))}
     </>
