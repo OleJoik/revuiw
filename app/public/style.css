@@ -399,10 +399,8 @@ html, body, #root {
 
 /* Viewer cursor line */
 .viewer-body .line {
-  display: inline-block;
-  width: 100%;
+  display: block;
   border-left: 2px solid transparent;
-  padding-left: 0;
 }
 
 .viewer-body .line.cursor-line {

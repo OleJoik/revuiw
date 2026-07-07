@@ -190,7 +190,6 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
               {line.map((t: any, j: number) => (
                 <span key={j} style={{ color: t.color }}>{t.content}</span>
               ))}
-              {"\n"}
             </span>
           ))}</code></pre>
         ) : (
@@ -202,7 +201,6 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
             >
               <span className="line-number">{i + 1}</span>
               {line}
-              {"\n"}
             </span>
           ))}</code></pre>
         )}
