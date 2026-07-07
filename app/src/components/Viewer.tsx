@@ -20,6 +20,7 @@ const CODE_PAD_LEFT = LINE_NUMBER_WIDTH;
 const CODE_PAD_RIGHT = 16;
 const TAB_SIZE = 2;
 const OVERSCAN_PX = 600;
+const SCROLL_OFF_OPTIONS = [0, 3, 5, 8, 12];
 
 function clampLine(line: number, count: number) {
   if (count <= 0) return 0;
@@ -67,6 +68,11 @@ function buildWrappedMetrics(lines: string[], width: number, font: string): RowM
 function totalHeight(metrics: RowMetric[]) {
   const last = metrics[metrics.length - 1];
   return last ? last.top + last.height + PRE_PAD_BOTTOM : PRE_PAD_TOP + PRE_PAD_BOTTOM;
+}
+
+function clampScrollTop(value: number, metrics: RowMetric[], viewportHeight: number) {
+  const maxScrollTop = Math.max(0, totalHeight(metrics) - viewportHeight);
+  return Math.max(0, Math.min(maxScrollTop, value));
 }
 
 function findLineAtOffset(metrics: RowMetric[], y: number) {
@@ -123,12 +129,18 @@ function splitLines(content: string) {
   return lines;
 }
 
+function nextScrollOff(value: number) {
+  const next = SCROLL_OFF_OPTIONS.find(option => option > value);
+  return next ?? SCROLL_OFF_OPTIONS[0];
+}
+
 export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [content, setContent] = useState("");
   const [tokens, setTokens] = useState<Token[][] | null>(null);
   const [loading, setLoading] = useState(false);
   const [wrap, setWrap] = useSetting("viewer:wrap", false);
   const [relNum, setRelNum] = useSetting("viewer:relnumber", false);
+  const [scrollOff, setScrollOff] = useSetting("viewer:scrolloff", 5);
   const [cursorLine, setCursorLine] = useState(0);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0, width: 0 });
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -158,28 +170,46 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     const metric = metrics[line];
     if (!body || !metric) return;
 
-    const maxScrollTop = Math.max(0, totalHeight(metrics) - body.clientHeight);
     const setScrollTop = (value: number) => {
-      body.scrollTop = Math.max(0, Math.min(maxScrollTop, value));
+      body.scrollTop = clampScrollTop(value, metrics, body.clientHeight);
     };
 
-    const top = metric.top;
-    const bottom = metric.top + metric.height;
+    const topLine = Math.max(0, line - scrollOff);
+    const bottomLine = Math.min(metrics.length - 1, line + scrollOff);
+    const top = metrics[topLine].top;
+    const bottom = metrics[bottomLine].top + metrics[bottomLine].height;
+
     if (top < body.scrollTop) {
       setScrollTop(top);
     } else if (bottom > body.scrollTop + body.clientHeight) {
       setScrollTop(bottom - body.clientHeight);
     }
+  }, [metrics, scrollOff]);
+
+  const centerLine = useCallback((line: number) => {
+    const body = bodyRef.current;
+    const metric = metrics[line];
+    if (!body || !metric) return;
+
+    body.scrollTop = clampScrollTop(
+      metric.top + metric.height / 2 - body.clientHeight / 2,
+      metrics,
+      body.clientHeight,
+    );
   }, [metrics]);
 
-  const moveCursor = useCallback((next: number) => {
+  const moveCursor = useCallback((next: number, options?: { center?: boolean }) => {
     const line = clampLine(next, lineCount);
     if (line === cursorRef.current) return;
 
     cursorRef.current = line;
-    ensureVisible(line);
+    if (options?.center) {
+      centerLine(line);
+    } else {
+      ensureVisible(line);
+    }
     setCursorLine(line);
-  }, [ensureVisible, lineCount]);
+  }, [centerLine, ensureVisible, lineCount]);
 
   useEffect(() => {
     cursorRef.current = 0;
@@ -192,6 +222,10 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     cursorRef.current = line;
     setCursorLine(line);
   }, [lineCount]);
+
+  useEffect(() => {
+    ensureVisible(cursorRef.current);
+  }, [ensureVisible, scrollOff]);
 
   useEffect(() => {
     const body = bodyRef.current;
@@ -225,14 +259,14 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
       if (e.ctrlKey && e.key === "d") {
         e.preventDefault();
         const halfPage = Math.max(1, Math.floor((bodyRef.current?.clientHeight ?? LINE_HEIGHT) / LINE_HEIGHT / 2));
-        moveCursor(cursorRef.current + halfPage);
+        moveCursor(cursorRef.current + halfPage, { center: true });
         return;
       }
 
       if (e.ctrlKey && e.key === "u") {
         e.preventDefault();
         const halfPage = Math.max(1, Math.floor((bodyRef.current?.clientHeight ?? LINE_HEIGHT) / LINE_HEIGHT / 2));
-        moveCursor(cursorRef.current - halfPage);
+        moveCursor(cursorRef.current - halfPage, { center: true });
         return;
       }
 
@@ -351,6 +385,13 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
             title={wrap ? "Disable word wrap" : "Enable word wrap"}
           >
             Wrap
+          </button>
+          <button
+            className={`viewer-wrap-toggle ${scrollOff > 0 ? "active" : ""}`}
+            onClick={() => setScrollOff(nextScrollOff(scrollOff))}
+            title="Cycle scrolloff"
+          >
+            SO {scrollOff}
           </button>
           <button className="viewer-close" onClick={onClose}>&times;</button>
         </div>
