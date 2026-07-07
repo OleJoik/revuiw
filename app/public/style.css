@@ -353,27 +353,16 @@ html, body, #root {
   flex: 1;
   overflow: auto;
   background: var(--bg);
+  position: relative;
 }
 
-.viewer-body.wrap pre,
-.viewer-body.wrap pre.shiki {
+.viewer-body.wrap .viewer-code {
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-.viewer-body.nowrap pre,
-.viewer-body.nowrap pre.shiki {
+.viewer-body.nowrap .viewer-code {
   white-space: pre;
-}
-
-.viewer-body pre {
-  margin: 0;
-  padding: 12px 16px;
-  font-family: var(--font);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--fg);
-  tab-size: 2;
 }
 
 .viewer-body pre.shiki {
@@ -386,11 +375,7 @@ html, body, #root {
   color: var(--fg-muted);
 }
 
-/* Viewer cursor line */
-.viewer-body {
-  position: relative;
-}
-
+/* Viewer cursor and gutter */
 .viewer-cursor {
   position: absolute;
   top: 0;
@@ -401,30 +386,45 @@ html, body, #root {
   border-left: 2px solid var(--accent);
   pointer-events: none;
   will-change: transform;
-  z-index: 1;
+  z-index: 2;
 }
 
-.viewer-body pre {
-  position: relative;
-  z-index: 0;
-}
-
-.viewer-body .line {
-  display: block;
-  padding-left: 1ch;
-}
-
-.viewer-body .line-number {
-  display: inline-block;
-  width: 4ch;
-  padding-right: 1.5ch;
-  margin-right: 2.5ch;
-  border-right: 1px solid var(--border);
+.viewer-gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5ch;
+  margin: 0;
+  padding: 12px 1ch 12px 1ch;
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.5;
   text-align: right;
   color: var(--fg-muted);
   opacity: 0.5;
   user-select: none;
   pointer-events: none;
+  z-index: 3;
+}
+
+.viewer-body .viewer-code {
+  margin: 0;
+  padding: 12px 16px 12px calc(5ch + 3ch);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg);
+  tab-size: 2;
+  position: relative;
+  z-index: 1;
+}
+
+.viewer-body .viewer-code.shiki {
+  background: transparent !important;
+}
+
+.viewer-body .line {
+  display: block;
 }
 
 /* ---- OpenCode Panel ---- */

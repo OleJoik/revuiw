@@ -19,14 +19,30 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [relNum, setRelNum] = useSetting("viewer:relnumber", false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const cursorElRef = useRef<HTMLDivElement>(null);
+  const gutterRef = useRef<HTMLPreElement>(null);
   const cursorRef = useRef(0);
   const relNumRef = useRef(relNum);
   relNumRef.current = relNum;
-  const lineNumEls = useRef<HTMLElement[]>([]);
 
   const lineCount = tokens ? tokens.length : content.split("\n").length;
   const lineCountRef = useRef(lineCount);
   lineCountRef.current = lineCount;
+
+  // Build gutter text — single string, one DOM write
+  const updateGutter = useCallback((cursor: number) => {
+    const el = gutterRef.current;
+    if (!el) return;
+    const count = lineCountRef.current;
+    const rel = relNumRef.current;
+    let text = "";
+    for (let i = 0; i < count; i++) {
+      if (i > 0) text += "\n";
+      text += rel
+        ? (i === cursor ? String(i + 1) : String(Math.abs(i - cursor)))
+        : String(i + 1);
+    }
+    el.textContent = text;
+  }, []);
 
   // Position the cursor overlay
   const positionCursor = useCallback((line: number) => {
@@ -51,28 +67,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     }
   }, []);
 
-  // Update visible line numbers for relative mode
-  const updateLineNumbers = useCallback((cursor: number) => {
-    const body = bodyRef.current;
-    if (!body) return;
-    const els = lineNumEls.current;
-    const rel = relNumRef.current;
-    const { scrollTop, clientHeight } = body;
-    const first = Math.max(0, Math.floor((scrollTop - PRE_PAD_TOP) / LINE_HEIGHT) - 2);
-    const last = Math.min(lineCountRef.current - 1, Math.ceil((scrollTop + clientHeight - PRE_PAD_TOP) / LINE_HEIGHT) + 2);
-
-    for (let i = first; i <= last; i++) {
-      const el = els[i];
-      if (!el) continue;
-      el.textContent = rel
-        ? (i === cursor ? String(i + 1) : String(Math.abs(i - cursor)))
-        : String(i + 1);
-    }
-  }, []);
-
-  const lineNumRaf = useRef<number | null>(null);
-
-  // Move cursor — synchronous, minimal DOM work
+  // Move cursor
   const moveCursor = useCallback((next: number) => {
     const count = lineCountRef.current;
     if (next < 0) next = 0;
@@ -81,19 +76,15 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     cursorRef.current = next;
     positionCursor(next);
     ensureVisible(next);
-    if (relNumRef.current && lineNumRaf.current === null) {
-      lineNumRaf.current = requestAnimationFrame(() => {
-        lineNumRaf.current = null;
-        updateLineNumbers(cursorRef.current);
-      });
-    }
-  }, [positionCursor, ensureVisible, updateLineNumbers]);
+    if (relNumRef.current) updateGutter(next);
+  }, [positionCursor, ensureVisible, updateGutter]);
 
-  // Reset cursor when file changes
+  // Initial gutter render
   useEffect(() => {
     cursorRef.current = 0;
     positionCursor(0);
-  }, [filePath, tokens, positionCursor]);
+    updateGutter(0);
+  }, [filePath, tokens, content, positionCursor, updateGutter]);
 
   // Show/hide cursor overlay when focus changes
   useEffect(() => {
@@ -103,10 +94,10 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     }
   }, [focused]);
 
-  // Re-apply line numbers when relNum mode toggles
+  // Re-apply gutter when relNum mode toggles
   useEffect(() => {
-    updateLineNumbers(cursorRef.current);
-  }, [relNum, updateLineNumbers]);
+    updateGutter(cursorRef.current);
+  }, [relNum, updateGutter]);
 
   // Vim-like keyboard navigation
   useEffect(() => {
@@ -206,9 +197,9 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     if (line >= 0 && line < lineCountRef.current) {
       cursorRef.current = line;
       positionCursor(line);
-      if (relNumRef.current) updateLineNumbers(line);
+      if (relNumRef.current) updateGutter(line);
     }
-  }, [positionCursor, updateLineNumbers]);
+  }, [positionCursor, updateGutter]);
 
   if (!filePath) {
     return (
@@ -248,23 +239,20 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
         onMouseDown={handleLineClick}
       >
         <div className="viewer-cursor" ref={cursorElRef} />
+        <pre className="viewer-gutter" ref={gutterRef} />
         {loading ? (
           <div className="viewer-loading">Loading...</div>
         ) : tokens ? (
-          <pre className="shiki"><code>{tokens.map((line, i) => (
+          <pre className="shiki viewer-code"><code>{tokens.map((line, i) => (
             <span className="line" key={i}>
-              <span className="line-number" ref={(el) => { if (el) lineNumEls.current[i] = el; }}>{i + 1}</span>
               {line.map((t: any, j: number) => (
                 <span key={j} style={{ color: t.color }}>{t.content}</span>
               ))}
             </span>
           ))}</code></pre>
         ) : (
-          <pre><code>{plainLines!.map((line, i) => (
-            <span className="line" key={i}>
-              <span className="line-number" ref={(el) => { if (el) lineNumEls.current[i] = el; }}>{i + 1}</span>
-              {line}
-            </span>
+          <pre className="viewer-code"><code>{plainLines!.map((line, i) => (
+            <span className="line" key={i}>{line}</span>
           ))}</code></pre>
         )}
       </div>
