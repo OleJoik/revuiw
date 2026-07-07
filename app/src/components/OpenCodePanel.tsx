@@ -1,5 +1,26 @@
 import React, { useState, useEffect, useRef } from "react";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { useSetting } from "../hooks";
+
+// Configure marked for safe, compact output
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+});
+
+// DOMPurify config matching OpenCode's web UI
+const purifyConfig: DOMPurify.Config = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ["style"],
+  FORBID_CONTENTS: ["style", "script"],
+  ADD_ATTR: ["target"],
+};
+
+function renderMarkdown(text: string): string {
+  const raw = marked.parse(text) as string;
+  return DOMPurify.sanitize(raw, purifyConfig);
+}
 
 interface Props {
   open: boolean;
@@ -174,9 +195,17 @@ export function OpenCodePanel({ open, onToggle }: Props) {
               .map(p => p.text)
               .join("");
             if (!text.trim()) return null;
+            const isAssistant = role === "assistant";
             return (
               <div key={i} className={`oc-msg ${role}`}>
-                {text.trim()}
+                {isAssistant ? (
+                  <div
+                    className="oc-markdown"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(text.trim()) }}
+                  />
+                ) : (
+                  text.trim()
+                )}
               </div>
             );
           })}

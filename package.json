@@ -2,8 +2,15 @@
   "name": "revuiw",
   "private": true,
   "type": "module",
+  "scripts": {
+    "dev": "NODE_ENV=development bun --watch app/server.ts",
+    "start": "bun app/server.ts"
+  },
   "dependencies": {
-    "@opencode-ai/sdk": "latest",
+    "@opencode-ai/sdk": "^1.17.14",
+    "@types/dompurify": "^3.2.0",
+    "dompurify": "^3.4.11",
+    "marked": "^15.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "shiki": "4.3.1"

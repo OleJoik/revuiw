@@ -618,3 +618,96 @@ html, body, #root {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ---- Markdown in chat ---- */
+
+.oc-markdown {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.oc-markdown p {
+  margin: 0 0 0.4em;
+}
+
+.oc-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.oc-markdown strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.oc-markdown em {
+  font-style: italic;
+}
+
+.oc-markdown code {
+  background: var(--bg-hover);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--font);
+  font-size: 10px;
+}
+
+.oc-markdown pre {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 4px 0;
+  overflow-x: auto;
+}
+
+.oc-markdown pre code {
+  background: none;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.oc-markdown ul,
+.oc-markdown ol {
+  margin: 4px 0;
+  padding-left: 16px;
+}
+
+.oc-markdown li {
+  margin: 2px 0;
+}
+
+.oc-markdown h1,
+.oc-markdown h2,
+.oc-markdown h3,
+.oc-markdown h4 {
+  margin: 6px 0 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.oc-markdown h1 { font-size: 13px; }
+.oc-markdown h2 { font-size: 12px; }
+
+.oc-markdown blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+  margin: 4px 0;
+  color: var(--fg-muted);
+}
+
+.oc-markdown a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.oc-markdown a:hover {
+  text-decoration: underline;
+}
+
+.oc-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 6px 0;
+}
