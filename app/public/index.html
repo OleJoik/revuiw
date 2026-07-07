@@ -3,77 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>filetree</title>
+  <title>revuiw</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div id="sidebar">
-    <div id="root-section">
-      <div id="root-current"></div>
-      <div id="root-actions">
-        <button id="root-browse-btn">Browse</button>
-        <button id="root-scan-btn">Scan</button>
-      </div>
-      <div id="root-list"></div>
-    </div>
-    <div id="search-container">
-      <input id="search" type="text" placeholder="Search files..." autocomplete="off" />
-      <button id="toggle-hidden" title="Show hidden files">.*</button>
-    </div>
-    <div id="tree"></div>
-  </div>
-  <div id="viewer">
-    <div id="viewer-placeholder">Select a file to view its contents</div>
-    <div id="viewer-content" style="display:none">
-      <div id="viewer-header">
-        <span id="viewer-path"></span>
-        <button id="viewer-close">&times;</button>
-      </div>
-      <pre id="viewer-body"></pre>
-    </div>
-  </div>
-  <div id="opencode-panel" class="collapsed">
-    <div id="opencode-tab" title="Toggle OpenCode">OC</div>
-    <div id="opencode-resize-handle"></div>
-    <div id="opencode-container">
-      <div id="opencode-header">
-        <span>OpenCode</span>
-        <button id="opencode-close" title="Close panel">&times;</button>
-      </div>
-      <div id="opencode-body">
-        <div id="opencode-sessions">
-          <div id="opencode-session-header">
-            <span>Sessions</span>
-            <button id="opencode-new-session">+ New</button>
-          </div>
-          <div id="opencode-session-list"></div>
-        </div>
-        <div id="opencode-chat">
-          <div id="opencode-messages"></div>
-          <div id="opencode-input-row">
-            <input id="opencode-input" type="text" placeholder="Ask a question..." autocomplete="off" />
-            <button id="opencode-send">Send</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div id="browse-modal" style="display:none">
-    <div id="browse-overlay"></div>
-    <div id="browse-dialog">
-      <div id="browse-header">Browse for folder</div>
-      <div id="browse-path-row">
-        <input id="browse-path" type="text" spellcheck="false" />
-        <button id="browse-go">Go</button>
-      </div>
-      <div id="browse-dirs"></div>
-      <div id="browse-footer">
-        <button id="browse-cancel">Cancel</button>
-        <button id="browse-select">Select this</button>
-      </div>
-    </div>
-  </div>
-  <script src="/app.js"></script>
-  <script src="/opencode.js"></script>
+  <div id="root"></div>
+  <script type="module" src="../src/main.tsx"></script>
 </body>
 </html>

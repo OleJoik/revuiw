@@ -165,6 +165,11 @@ async function scanGitRepos(parentPath: string): Promise<string[]> {
 
 Bun.serve({
   port: 3000,
+  development: process.env.NODE_ENV === "development",
+  static: {
+    "/": Bun.file(join(import.meta.dir, "public/index.html")),
+    "/style.css": Bun.file(join(import.meta.dir, "public/style.css")),
+  },
   async fetch(req) {
     try {
       const url = new URL(req.url);
@@ -324,10 +329,6 @@ Bun.serve({
           headers: { "Content-Type": "application/json" },
         });
       }
-
-      const staticPath = pathname === "/" ? "/index.html" : pathname;
-      const file = Bun.file(join(import.meta.dir, "public", staticPath));
-      if (await file.exists()) return new Response(file);
 
       return new Response("Not found", { status: 404 });
     } catch (err) {
