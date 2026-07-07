@@ -364,7 +364,6 @@ html, body, #root {
 .viewer-body.nowrap pre,
 .viewer-body.nowrap pre.shiki {
   white-space: pre;
-  overflow-x: auto;
 }
 
 .viewer-body pre {
