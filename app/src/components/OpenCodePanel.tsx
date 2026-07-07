@@ -58,6 +58,7 @@ export function OpenCodePanel({ open, onToggle }: Props) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEnd = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const dragging = useRef(false);
 
   // Resize
@@ -164,6 +165,7 @@ export function OpenCodePanel({ open, onToggle }: Props) {
     }
 
     setLoading(false);
+    inputRef.current?.focus();
   };
 
   // Collapsed state: just show tab
@@ -231,6 +233,7 @@ export function OpenCodePanel({ open, onToggle }: Props) {
         </div>
         <div className="oc-input-row">
           <input
+            ref={inputRef}
             type="text"
             placeholder="Ask a question..."
             value={input}
