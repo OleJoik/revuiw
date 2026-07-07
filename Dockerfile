@@ -15,3 +15,7 @@ RUN curl -fsSL https://opencode.ai/install | bash
 ENV PATH="/root/.local/bin:/root/.opencode/bin:/root/.bun/bin:${PATH}"
 
 WORKDIR /workspace
+
+# Install dependencies (will re-run if package.json changes)
+COPY package.json bun.lock* ./
+RUN bun install

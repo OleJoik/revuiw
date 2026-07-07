@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@opencode-ai/sdk": "latest",
     "shiki": "4.3.1"
   }
 }

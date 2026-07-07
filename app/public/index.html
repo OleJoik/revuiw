@@ -32,6 +32,28 @@
       <pre id="viewer-body"></pre>
     </div>
   </div>
+  <div id="opencode-panel">
+    <div id="opencode-header">
+      <span>OpenCode</span>
+      <button id="opencode-toggle" title="Toggle panel">&#x25C0;</button>
+    </div>
+    <div id="opencode-body">
+      <div id="opencode-sessions">
+        <div id="opencode-session-header">
+          <span>Sessions</span>
+          <button id="opencode-new-session">+ New</button>
+        </div>
+        <div id="opencode-session-list"></div>
+      </div>
+      <div id="opencode-chat">
+        <div id="opencode-messages"></div>
+        <div id="opencode-input-row">
+          <input id="opencode-input" type="text" placeholder="Ask a question..." autocomplete="off" />
+          <button id="opencode-send">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="browse-modal" style="display:none">
     <div id="browse-overlay"></div>
     <div id="browse-dialog">
@@ -48,5 +70,6 @@
     </div>
   </div>
   <script src="/app.js"></script>
+  <script src="/opencode.js"></script>
 </body>
 </html>

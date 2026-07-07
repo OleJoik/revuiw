@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile, mkdir, stat } from "fs/promises";
 import { join, relative, resolve, dirname, basename, extname } from "path";
 import { homedir } from "os";
 import { createHighlighter, type Highlighter } from "shiki";
+import { createOpencodeClient } from "@opencode-ai/sdk";
 
 // --- Shiki syntax highlighting setup ---
 
@@ -80,6 +81,10 @@ function tokenizeCode(code: string, lang: string | null): Token[][] | null {
 
 // Initialize highlighter before starting server
 await initHighlighter();
+
+// --- OpenCode SDK client ---
+const OPENCODE_URL = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
+const opencode = createOpencodeClient({ baseUrl: OPENCODE_URL });
 
 const EXCLUDED = new Set(["node_modules", ".git", "dist"]);
 const ROOTS_FILE = join(homedir(), ".filetree", "roots.json");
@@ -271,6 +276,51 @@ Bun.serve({
         dirs.sort((a, b) => a.name.localeCompare(b.name));
 
         return new Response(JSON.stringify({ path: resolved, parent, isGit, branch, dirs }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // --- OpenCode API endpoints ---
+
+      if (pathname === "/api/opencode/sessions" && req.method === "GET") {
+        const { data, error } = await opencode.session.list();
+        if (error) return new Response(JSON.stringify({ error: "Failed to list sessions" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(data), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (pathname === "/api/opencode/sessions" && req.method === "POST") {
+        const body = await req.json();
+        const { data, error } = await opencode.session.create({ body: { title: body.title } });
+        if (error) return new Response(JSON.stringify({ error: "Failed to create session" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(data), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const sessionMsgMatch = pathname.match(/^\/api\/opencode\/sessions\/([^/]+)\/messages$/);
+      if (sessionMsgMatch && req.method === "GET") {
+        const sessionId = sessionMsgMatch[1];
+        const { data, error } = await opencode.session.messages({ path: { id: sessionId } });
+        if (error) return new Response(JSON.stringify({ error: "Failed to get messages" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(data), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const sessionPromptMatch = pathname.match(/^\/api\/opencode\/sessions\/([^/]+)\/prompt$/);
+      if (sessionPromptMatch && req.method === "POST") {
+        const sessionId = sessionPromptMatch[1];
+        const body = await req.json();
+        const { data, error } = await opencode.session.prompt({
+          path: { id: sessionId },
+          body: {
+            parts: [{ type: "text", text: body.message }],
+          },
+        });
+        if (error) return new Response(JSON.stringify({ error: "Failed to send prompt" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(data), {
           headers: { "Content-Type": "application/json" },
         });
       }
