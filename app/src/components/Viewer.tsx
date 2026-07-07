@@ -142,6 +142,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [relNum, setRelNum] = useSetting("viewer:relnumber", false);
   const [scrollOff, setScrollOff] = useSetting("viewer:scrolloff", 5);
   const [cursorLine, setCursorLine] = useState(0);
+  const [visualAnchor, setVisualAnchor] = useState<number | null>(null);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0, width: 0 });
   const bodyRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef(0);
@@ -214,6 +215,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   useEffect(() => {
     cursorRef.current = 0;
     setCursorLine(0);
+    setVisualAnchor(null);
     if (bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [filePath]);
 
@@ -255,6 +257,12 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
 
     const handleKey = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey) return;
+
+      if (e.key === "Escape" && visualAnchor !== null) {
+        e.preventDefault();
+        setVisualAnchor(null);
+        return;
+      }
 
       if (e.ctrlKey && e.key === "d") {
         e.preventDefault();
@@ -301,12 +309,16 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
           e.preventDefault();
           moveCursor(lineCount - 1);
           break;
+        case "V":
+          e.preventDefault();
+          setVisualAnchor(anchor => anchor === null ? cursorRef.current : null);
+          break;
       }
     };
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [filePath, focused, lineCount, loading, moveCursor]);
+  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor]);
 
   useEffect(() => {
     if (!filePath) {
@@ -367,11 +379,17 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     );
   }
 
+  const selectionStart = visualAnchor === null ? -1 : Math.min(visualAnchor, cursorLine);
+  const selectionEnd = visualAnchor === null ? -1 : Math.max(visualAnchor, cursorLine);
+
   return (
     <div className={`viewer ${focused ? "panel-focused" : ""}`} onMouseDown={onFocus}>
       <div className="viewer-header">
         <span className="viewer-path">{filePath}</span>
         <div className="viewer-actions">
+          {visualAnchor !== null && (
+            <span className="viewer-mode">VISUAL LINE</span>
+          )}
           <button
             className={`viewer-wrap-toggle ${relNum ? "active" : ""}`}
             onClick={() => setRelNum(!relNum)}
@@ -421,10 +439,11 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
                   const i = range.start + offset;
                   const metric = metrics[i];
                   const isCursor = i === cursorLine;
+                  const isSelected = i >= selectionStart && i <= selectionEnd;
                   const lineNumber = relNum && !isCursor ? Math.abs(i - cursorLine) : i + 1;
                   return (
                     <span
-                      className={`line ${isCursor ? "cursor-line" : ""}`}
+                      className={`line ${isCursor ? "cursor-line" : ""} ${isSelected ? "selected-line" : ""}`}
                       key={i}
                       style={{ top: metric.top, minHeight: metric.height }}
                     >

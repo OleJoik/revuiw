@@ -335,6 +335,15 @@ html, body, #root {
   border-color: var(--accent);
 }
 
+.viewer-mode {
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .viewer-close {
   background: none;
   border: none;
@@ -417,6 +426,15 @@ html, body, #root {
 }
 
 .viewer-body .cursor-line .line-number {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.viewer-body .selected-line {
+  background: rgba(137, 180, 250, 0.16);
+}
+
+.viewer-body .selected-line .line-number {
   color: var(--accent);
   opacity: 1;
 }
