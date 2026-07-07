@@ -387,15 +387,31 @@ html, body, #root {
 }
 
 /* Viewer cursor line */
-.viewer-body .line {
-  display: block;
-  border-left: 2px solid transparent;
-  padding-left: 1ch;
+.viewer-body {
+  position: relative;
 }
 
-.viewer-body .line.cursor-line {
+.viewer-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 18px;
   background: rgba(136, 176, 255, 0.08);
   border-left: 2px solid var(--accent);
+  pointer-events: none;
+  will-change: transform;
+  z-index: 0;
+}
+
+.viewer-body pre {
+  position: relative;
+  z-index: 1;
+}
+
+.viewer-body .line {
+  display: block;
+  padding-left: 1ch;
 }
 
 .viewer-body .line-number {
@@ -409,17 +425,6 @@ html, body, #root {
   opacity: 0.5;
   user-select: none;
   pointer-events: none;
-}
-
-.viewer-body .cursor-line .line-number {
-  color: var(--accent);
-  opacity: 1;
-}
-
-.viewer-body.rel-numbers .cursor-line .line-number {
-  text-align: left;
-  border-right: none;
-  padding-right: calc(1.5ch + 1px);
 }
 
 /* ---- OpenCode Panel ---- */

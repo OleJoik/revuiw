@@ -8,6 +8,9 @@ interface Props {
   onFocus: () => void;
 }
 
+const LINE_HEIGHT = 18; // 12px font * 1.5 line-height
+const PRE_PAD_TOP = 12; // padding-top on <pre>
+
 export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [content, setContent] = useState<string>("");
   const [tokens, setTokens] = useState<any[][] | null>(null);
@@ -15,108 +18,81 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [wrap, setWrap] = useSetting("viewer:wrap", false);
   const [relNum, setRelNum] = useSetting("viewer:relnumber", false);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const lineEls = useRef<HTMLElement[]>([]);
+  const cursorElRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef(0);
   const relNumRef = useRef(relNum);
   relNumRef.current = relNum;
-  const rafRef = useRef<number | null>(null);
-  const pendingCursor = useRef<number | null>(null);
+  const lineNumEls = useRef<HTMLElement[]>([]);
 
   const lineCount = tokens ? tokens.length : content.split("\n").length;
   const lineCountRef = useRef(lineCount);
   lineCountRef.current = lineCount;
 
-  // Update only visible line numbers in the DOM
+  // Position the cursor overlay
+  const positionCursor = useCallback((line: number) => {
+    const el = cursorElRef.current;
+    if (el) {
+      el.style.transform = `translateY(${PRE_PAD_TOP + line * LINE_HEIGHT}px)`;
+    }
+  }, []);
+
+  // Ensure cursor line is visible in the scroll viewport
+  const ensureVisible = useCallback((line: number) => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const elTop = PRE_PAD_TOP + line * LINE_HEIGHT;
+    const elBottom = elTop + LINE_HEIGHT;
+    const { scrollTop, clientHeight } = body;
+
+    if (elTop < scrollTop) {
+      body.scrollTop = elTop;
+    } else if (elBottom > scrollTop + clientHeight) {
+      body.scrollTop = elBottom - clientHeight;
+    }
+  }, []);
+
+  // Update visible line numbers for relative mode
   const updateLineNumbers = useCallback((cursor: number) => {
     const body = bodyRef.current;
     if (!body) return;
-    const els = lineEls.current;
+    const els = lineNumEls.current;
     const rel = relNumRef.current;
-    const lineHeight = els[0]?.offsetHeight || 18;
-    const scrollTop = body.scrollTop;
-    const viewHeight = body.clientHeight;
-    const firstVisible = Math.max(0, Math.floor(scrollTop / lineHeight) - 2);
-    const lastVisible = Math.min(lineCountRef.current - 1, Math.ceil((scrollTop + viewHeight) / lineHeight) + 2);
+    const { scrollTop, clientHeight } = body;
+    const first = Math.max(0, Math.floor((scrollTop - PRE_PAD_TOP) / LINE_HEIGHT) - 2);
+    const last = Math.min(lineCountRef.current - 1, Math.ceil((scrollTop + clientHeight - PRE_PAD_TOP) / LINE_HEIGHT) + 2);
 
-    for (let i = firstVisible; i <= lastVisible; i++) {
+    for (let i = first; i <= last; i++) {
       const el = els[i];
       if (!el) continue;
-      const numEl = el.firstElementChild as HTMLElement;
-      if (!numEl) continue;
-      numEl.textContent = rel
+      el.textContent = rel
         ? (i === cursor ? String(i + 1) : String(Math.abs(i - cursor)))
         : String(i + 1);
     }
   }, []);
 
-  // Flush pending cursor move in animation frame
-  const flushCursor = useCallback(() => {
-    rafRef.current = null;
-    const next = pendingCursor.current;
-    if (next === null) return;
-    pendingCursor.current = null;
-
-    const prev = cursorRef.current;
-    if (next === prev) return;
-
-    const oldEl = lineEls.current[prev];
-    const newEl = lineEls.current[next];
-    if (oldEl) oldEl.classList.remove("cursor-line");
-    if (newEl) newEl.classList.add("cursor-line");
-    cursorRef.current = next;
-
-    // Manual scroll instead of scrollIntoView (avoids forced reflow)
-    const body = bodyRef.current;
-    if (body && newEl) {
-      const elTop = newEl.offsetTop;
-      const elHeight = newEl.offsetHeight;
-      const scrollTop = body.scrollTop;
-      const viewHeight = body.clientHeight;
-
-      if (elTop < scrollTop) {
-        body.scrollTop = elTop;
-      } else if (elTop + elHeight > scrollTop + viewHeight) {
-        body.scrollTop = elTop + elHeight - viewHeight;
-      }
-    }
-
-    if (relNumRef.current) updateLineNumbers(next);
-  }, [updateLineNumbers]);
-
-  // Schedule cursor move batched to next animation frame
+  // Move cursor — synchronous, minimal DOM work
   const moveCursor = useCallback((next: number) => {
-    pendingCursor.current = next;
-    if (rafRef.current === null) {
-      rafRef.current = requestAnimationFrame(flushCursor);
-    }
-  }, [flushCursor]);
-
-  // Immediate move (for clicks, file change, etc.)
-  const moveCursorImmediate = useCallback((next: number) => {
-    pendingCursor.current = next;
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    flushCursor();
-  }, [flushCursor]);
+    const count = lineCountRef.current;
+    if (next < 0) next = 0;
+    if (next >= count) next = count - 1;
+    if (next === cursorRef.current) return;
+    cursorRef.current = next;
+    positionCursor(next);
+    ensureVisible(next);
+    if (relNumRef.current) updateLineNumbers(next);
+  }, [positionCursor, ensureVisible, updateLineNumbers]);
 
   // Reset cursor when file changes
   useEffect(() => {
     cursorRef.current = 0;
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    };
-  }, [filePath]);
+    positionCursor(0);
+  }, [filePath, tokens, positionCursor]);
 
-  // Sync cursor-line class when focus changes
+  // Show/hide cursor overlay when focus changes
   useEffect(() => {
-    const el = lineEls.current[cursorRef.current];
-    if (!el) return;
-    if (focused) {
-      el.classList.add("cursor-line");
-    } else {
-      el.classList.remove("cursor-line");
+    const el = cursorElRef.current;
+    if (el) {
+      el.style.opacity = focused ? "1" : "0";
     }
   }, [focused]);
 
@@ -125,30 +101,28 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     updateLineNumbers(cursorRef.current);
   }, [relNum, updateLineNumbers]);
 
-  // Vim-like keyboard navigation when viewer is focused
+  // Vim-like keyboard navigation
   useEffect(() => {
     if (!focused || !filePath || loading) return;
 
     const handleKey = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey) return;
 
-      // Ctrl+d: half-page down
       if (e.ctrlKey && e.key === "d") {
         e.preventDefault();
         const body = bodyRef.current;
         if (!body) return;
-        const pageLines = Math.floor(body.clientHeight / 18 / 2);
-        moveCursor(Math.min(cursorRef.current + pageLines, lineCount - 1));
+        const half = Math.floor(body.clientHeight / LINE_HEIGHT / 2);
+        moveCursor(cursorRef.current + half);
         return;
       }
 
-      // Ctrl+u: half-page up
       if (e.ctrlKey && e.key === "u") {
         e.preventDefault();
         const body = bodyRef.current;
         if (!body) return;
-        const pageLines = Math.floor(body.clientHeight / 18 / 2);
-        moveCursor(Math.max(cursorRef.current - pageLines, 0));
+        const half = Math.floor(body.clientHeight / LINE_HEIGHT / 2);
+        moveCursor(cursorRef.current - half);
         return;
       }
 
@@ -158,12 +132,12 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
         case "j":
         case "ArrowDown":
           e.preventDefault();
-          moveCursor(Math.min(cursorRef.current + 1, lineCount - 1));
+          moveCursor(cursorRef.current + 1);
           break;
         case "k":
         case "ArrowUp":
           e.preventDefault();
-          moveCursor(Math.max(cursorRef.current - 1, 0));
+          moveCursor(cursorRef.current - 1);
           break;
         case "h":
         case "ArrowLeft":
@@ -185,14 +159,14 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
           break;
         case "G":
           e.preventDefault();
-          moveCursor(lineCount - 1);
+          moveCursor(lineCountRef.current - 1);
           break;
       }
     };
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [focused, filePath, loading, lineCount, moveCursor]);
+  }, [focused, filePath, loading, moveCursor]);
 
   useEffect(() => {
     if (!filePath) { setContent(""); setTokens(null); return; }
@@ -215,9 +189,19 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
       .catch(() => { setContent("Error reading file"); setLoading(false); });
   }, [filePath]);
 
-  const setLineRef = useCallback((i: number, el: HTMLElement | null) => {
-    if (el) lineEls.current[i] = el;
-  }, []);
+  // Click to move cursor
+  const handleLineClick = useCallback((e: React.MouseEvent) => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const rect = body.getBoundingClientRect();
+    const y = e.clientY - rect.top + body.scrollTop - PRE_PAD_TOP;
+    const line = Math.floor(y / LINE_HEIGHT);
+    if (line >= 0 && line < lineCountRef.current) {
+      cursorRef.current = line;
+      positionCursor(line);
+      if (relNumRef.current) updateLineNumbers(line);
+    }
+  }, [positionCursor, updateLineNumbers]);
 
   if (!filePath) {
     return (
@@ -251,18 +235,18 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
           <button className="viewer-close" onClick={onClose}>&times;</button>
         </div>
       </div>
-      <div className={`viewer-body ${wrap ? "wrap" : "nowrap"} ${relNum ? "rel-numbers" : ""}`} ref={bodyRef}>
+      <div
+        className={`viewer-body ${wrap ? "wrap" : "nowrap"} ${relNum ? "rel-numbers" : ""}`}
+        ref={bodyRef}
+        onMouseDown={handleLineClick}
+      >
+        <div className="viewer-cursor" ref={cursorElRef} />
         {loading ? (
           <div className="viewer-loading">Loading...</div>
         ) : tokens ? (
           <pre className="shiki"><code>{tokens.map((line, i) => (
-            <span
-              className="line"
-              key={i}
-              ref={(el) => setLineRef(i, el)}
-              onMouseDown={() => moveCursorImmediate(i)}
-            >
-              <span className="line-number">{i + 1}</span>
+            <span className="line" key={i}>
+              <span className="line-number" ref={(el) => { if (el) lineNumEls.current[i] = el; }}>{i + 1}</span>
               {line.map((t: any, j: number) => (
                 <span key={j} style={{ color: t.color }}>{t.content}</span>
               ))}
@@ -270,13 +254,8 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
           ))}</code></pre>
         ) : (
           <pre><code>{plainLines!.map((line, i) => (
-            <span
-              className="line"
-              key={i}
-              ref={(el) => setLineRef(i, el)}
-              onMouseDown={() => moveCursorImmediate(i)}
-            >
-              <span className="line-number">{i + 1}</span>
+            <span className="line" key={i}>
+              <span className="line-number" ref={(el) => { if (el) lineNumEls.current[i] = el; }}>{i + 1}</span>
               {line}
             </span>
           ))}</code></pre>
