@@ -34,14 +34,13 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     if (!el) return;
     const count = lineCountRef.current;
     const rel = relNumRef.current;
-    let text = "";
+    const lines = new Array(count);
     for (let i = 0; i < count; i++) {
-      if (i > 0) text += "\n";
-      text += rel
+      lines[i] = rel
         ? (i === cursor ? String(i + 1) : String(Math.abs(i - cursor)))
         : String(i + 1);
     }
-    el.textContent = text;
+    el.textContent = lines.join("\n");
   }, []);
 
   // Position the cursor overlay
