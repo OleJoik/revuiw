@@ -146,6 +146,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0, width: 0 });
   const bodyRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef(0);
+  const countRef = useRef("");
 
   const plainLines = useMemo(() => splitLines(content), [content]);
   const lines = plainLines;
@@ -258,56 +259,87 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     const handleKey = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey) return;
 
-      if (e.key === "Escape" && visualAnchor !== null) {
+      if (e.key === "Escape") {
         e.preventDefault();
-        setVisualAnchor(null);
+        countRef.current = "";
+        if (visualAnchor !== null) setVisualAnchor(null);
         return;
       }
 
       if (e.ctrlKey && e.key === "d") {
         e.preventDefault();
+        const count = parseInt(countRef.current) || 1;
+        countRef.current = "";
         const halfPage = Math.max(1, Math.floor((bodyRef.current?.clientHeight ?? LINE_HEIGHT) / LINE_HEIGHT / 2));
-        moveCursor(cursorRef.current + halfPage, { center: true });
+        moveCursor(cursorRef.current + halfPage * count, { center: true });
         return;
       }
 
       if (e.ctrlKey && e.key === "u") {
         e.preventDefault();
+        const count = parseInt(countRef.current) || 1;
+        countRef.current = "";
         const halfPage = Math.max(1, Math.floor((bodyRef.current?.clientHeight ?? LINE_HEIGHT) / LINE_HEIGHT / 2));
-        moveCursor(cursorRef.current - halfPage, { center: true });
+        moveCursor(cursorRef.current - halfPage * count, { center: true });
         return;
       }
 
       if (e.ctrlKey) return;
 
+      // Accumulate digit keys into count prefix (0 only if count already started)
+      if (e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        countRef.current += e.key;
+        return;
+      }
+      if (e.key === "0" && countRef.current.length > 0) {
+        e.preventDefault();
+        countRef.current += "0";
+        return;
+      }
+
+      const hasCount = countRef.current.length > 0;
+      const count = parseInt(countRef.current) || 1;
+      countRef.current = "";
+
       switch (e.key) {
         case "j":
         case "ArrowDown":
           e.preventDefault();
-          moveCursor(cursorRef.current + 1);
+          moveCursor(cursorRef.current + count);
           break;
         case "k":
         case "ArrowUp":
           e.preventDefault();
-          moveCursor(cursorRef.current - 1);
+          moveCursor(cursorRef.current - count);
           break;
         case "h":
         case "ArrowLeft":
           e.preventDefault();
-          if (bodyRef.current) bodyRef.current.scrollLeft = Math.max(0, bodyRef.current.scrollLeft - 40);
+          if (bodyRef.current) bodyRef.current.scrollLeft = Math.max(0, bodyRef.current.scrollLeft - 40 * count);
           break;
         case "l":
         case "ArrowRight":
           e.preventDefault();
-          if (bodyRef.current) bodyRef.current.scrollLeft += 40;
+          if (bodyRef.current) bodyRef.current.scrollLeft += 40 * count;
           break;
         case "g":
           e.preventDefault();
-          moveCursor(0);
+          // gg goes to top, {N}gg goes to line N (1-indexed like vim)
+          if (hasCount) {
+            moveCursor(count - 1);
+          } else {
+            moveCursor(0);
+          }
           break;
         case "G":
           e.preventDefault();
-          moveCursor(lineCount - 1);
+          // G goes to bottom, {N}G goes to line N (1-indexed like vim)
+          if (hasCount) {
+            moveCursor(count - 1);
+          } else {
+            moveCursor(lineCount - 1);
+          }
           break;
         case "V":
           e.preventDefault();
