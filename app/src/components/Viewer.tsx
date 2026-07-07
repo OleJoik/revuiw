@@ -117,6 +117,12 @@ function renderLine(tokens: Token[][] | null, plainLines: string[], i: number) {
   return tokenLine ? renderTokenLine(tokenLine) : plainLines[i];
 }
 
+function splitLines(content: string) {
+  const lines = content.split("\n");
+  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+
 export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [content, setContent] = useState("");
   const [tokens, setTokens] = useState<Token[][] | null>(null);
@@ -128,7 +134,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef(0);
 
-  const plainLines = useMemo(() => content.split("\n"), [content]);
+  const plainLines = useMemo(() => splitLines(content), [content]);
   const lines = plainLines;
   const lineCount = lines.length;
   const maxLineLength = useMemo(() => Math.max(1, ...lines.map(line => expandTabs(line).length)), [lines]);
