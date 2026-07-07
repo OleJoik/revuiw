@@ -8,90 +8,6 @@ interface Props {
   onFocus: () => void;
 }
 
-function HScrollbar({ containerRef }: { containerRef: React.RefObject<HTMLDivElement | null> }) {
-  const [thumb, setThumb] = useState({ left: 0, width: 0, visible: false });
-  const trackRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
-  const dragStartX = useRef(0);
-  const dragStartScroll = useRef(0);
-
-  const update = useCallback(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const { scrollWidth, clientWidth, scrollLeft } = el;
-    if (scrollWidth <= clientWidth) {
-      setThumb({ left: 0, width: 0, visible: false });
-      return;
-    }
-    const ratio = clientWidth / scrollWidth;
-    const thumbWidth = Math.max(ratio * 100, 10);
-    const thumbLeft = (scrollLeft / (scrollWidth - clientWidth)) * (100 - thumbWidth);
-    setThumb({ left: thumbLeft, width: thumbWidth, visible: true });
-  }, [containerRef]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    update();
-    el.addEventListener("scroll", update);
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    // Also observe the pre inside for content size changes
-    const pre = el.querySelector("pre");
-    if (pre) ro.observe(pre);
-    return () => {
-      el.removeEventListener("scroll", update);
-      ro.disconnect();
-    };
-  }, [containerRef, update]);
-
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragging.current = true;
-    dragStartX.current = e.clientX;
-    dragStartScroll.current = containerRef.current?.scrollLeft || 0;
-
-    const onMove = (ev: MouseEvent) => {
-      if (!dragging.current || !containerRef.current || !trackRef.current) return;
-      const trackWidth = trackRef.current.clientWidth;
-      const { scrollWidth, clientWidth } = containerRef.current;
-      const dx = ev.clientX - dragStartX.current;
-      const scrollRange = scrollWidth - clientWidth;
-      const thumbRange = trackWidth - (thumb.width / 100) * trackWidth;
-      containerRef.current.scrollLeft = dragStartScroll.current + (dx / thumbRange) * scrollRange;
-    };
-
-    const onUp = () => {
-      dragging.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, [containerRef, thumb.width]);
-
-  const onTrackClick = useCallback((e: React.MouseEvent) => {
-    if (!containerRef.current || !trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const clickRatio = (e.clientX - rect.left) / rect.width;
-    const { scrollWidth, clientWidth } = containerRef.current;
-    containerRef.current.scrollLeft = clickRatio * (scrollWidth - clientWidth);
-  }, [containerRef]);
-
-  if (!thumb.visible) return null;
-
-  return (
-    <div className="viewer-hscroll-track" ref={trackRef} onMouseDown={onTrackClick}>
-      <div
-        className="viewer-hscroll-thumb"
-        style={{ left: `${thumb.left}%`, width: `${thumb.width}%` }}
-        onMouseDown={onMouseDown}
-      />
-    </div>
-  );
-}
-
 export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [content, setContent] = useState<string>("");
   const [tokens, setTokens] = useState<any[][] | null>(null);
@@ -304,7 +220,6 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
           ))}</code></pre>
         )}
       </div>
-      <HScrollbar containerRef={bodyRef} />
     </div>
   );
 }
