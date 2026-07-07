@@ -1,7 +1,9 @@
 // --- OpenCode panel logic ---
 
 const ocPanel = document.getElementById("opencode-panel");
-const ocToggle = document.getElementById("opencode-toggle");
+const ocTab = document.getElementById("opencode-tab");
+const ocClose = document.getElementById("opencode-close");
+const ocResizeHandle = document.getElementById("opencode-resize-handle");
 const ocSessionList = document.getElementById("opencode-session-list");
 const ocNewSession = document.getElementById("opencode-new-session");
 const ocMessages = document.getElementById("opencode-messages");
@@ -12,12 +14,61 @@ let ocSessions = [];
 let ocCurrentSession = null;
 let ocLoading = false;
 
-// Toggle panel collapse
-ocToggle.addEventListener("click", () => {
-  ocPanel.classList.toggle("collapsed");
+// --- Toggle ---
+
+function ocOpen() {
+  ocPanel.classList.remove("collapsed");
+  saveSetting("oc:open", true);
+}
+
+function ocCollapse() {
+  ocPanel.classList.add("collapsed");
+  saveSetting("oc:open", false);
+}
+
+ocTab.addEventListener("click", ocOpen);
+ocClose.addEventListener("click", ocCollapse);
+
+// Restore state
+if (loadSetting("oc:open", false)) {
+  ocPanel.classList.remove("collapsed");
+}
+
+// --- Resize ---
+
+let ocResizing = false;
+
+ocResizeHandle.addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  ocResizing = true;
+  ocResizeHandle.classList.add("active");
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
 });
 
-// Load sessions from server
+document.addEventListener("mousemove", (e) => {
+  if (!ocResizing) return;
+  const newWidth = Math.max(240, Math.min(window.innerWidth * 0.5, window.innerWidth - e.clientX));
+  ocPanel.style.setProperty("--oc-width", newWidth + "px");
+  saveSetting("oc:width", newWidth);
+});
+
+document.addEventListener("mouseup", () => {
+  if (!ocResizing) return;
+  ocResizing = false;
+  ocResizeHandle.classList.remove("active");
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+});
+
+// Restore width
+const savedWidth = loadSetting("oc:width", null);
+if (savedWidth) {
+  ocPanel.style.setProperty("--oc-width", savedWidth + "px");
+}
+
+// --- Sessions ---
+
 async function ocLoadSessions() {
   try {
     const res = await fetch("/api/opencode/sessions");
@@ -29,15 +80,13 @@ async function ocLoadSessions() {
   }
 }
 
-// Render session list
 function ocRenderSessions() {
   ocSessionList.innerHTML = "";
   if (!ocSessions || ocSessions.length === 0) {
-    ocSessionList.innerHTML = '<div style="padding:8px;color:var(--fg-muted);font-size:11px">No sessions yet</div>';
+    ocSessionList.innerHTML = '<div style="padding:6px 8px;color:var(--fg-muted);font-size:10px">No sessions yet</div>';
     return;
   }
 
-  // Sort by most recent first
   const sorted = [...ocSessions].sort((a, b) => {
     const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
     const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
@@ -57,7 +106,6 @@ function ocRenderSessions() {
   }
 }
 
-// Select a session and load its messages
 async function ocSelectSession(session) {
   ocCurrentSession = session;
   ocRenderSessions();
@@ -73,7 +121,6 @@ async function ocSelectSession(session) {
   }
 }
 
-// Render messages in chat area
 function ocRenderMessages(messages) {
   ocMessages.innerHTML = "";
 
@@ -86,7 +133,6 @@ function ocRenderMessages(messages) {
     const role = msg.info?.role || "unknown";
     const parts = msg.parts || [];
 
-    // Extract text content from parts
     let text = "";
     for (const part of parts) {
       if (part.type === "text") {
@@ -107,7 +153,8 @@ function ocRenderMessages(messages) {
   ocMessages.scrollTop = ocMessages.scrollHeight;
 }
 
-// Create a new session
+// --- New session ---
+
 ocNewSession.addEventListener("click", async () => {
   try {
     const res = await fetch("/api/opencode/sessions", {
@@ -124,13 +171,13 @@ ocNewSession.addEventListener("click", async () => {
   }
 });
 
-// Send a prompt
+// --- Prompt ---
+
 async function ocSendPrompt() {
   const text = ocInput.value.trim();
   if (!text || ocLoading) return;
 
   if (!ocCurrentSession) {
-    // Auto-create a session if none selected
     try {
       const res = await fetch("/api/opencode/sessions", {
         method: "POST",
@@ -147,7 +194,6 @@ async function ocSendPrompt() {
     }
   }
 
-  // Show user message
   const userEl = document.createElement("div");
   userEl.className = "opencode-msg user";
   userEl.textContent = text;
@@ -158,7 +204,6 @@ async function ocSendPrompt() {
   ocLoading = true;
   ocSend.disabled = true;
 
-  // Show loading indicator
   const loadingEl = document.createElement("div");
   loadingEl.className = "opencode-msg status";
   loadingEl.textContent = "Thinking...";
@@ -174,10 +219,8 @@ async function ocSendPrompt() {
     if (!res.ok) throw new Error("Failed to get response");
     const data = await res.json();
 
-    // Remove loading indicator
     loadingEl.remove();
 
-    // Extract assistant response text
     let responseText = "";
     const parts = data.parts || [];
     for (const part of parts) {
@@ -213,5 +256,5 @@ ocInput.addEventListener("keydown", (e) => {
   }
 });
 
-// Initial load
+// --- Init ---
 ocLoadSessions();
