@@ -70,6 +70,8 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     }
   }, []);
 
+  const lineNumTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Move cursor — synchronous, minimal DOM work
   const moveCursor = useCallback((next: number) => {
     const count = lineCountRef.current;
@@ -79,7 +81,11 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     cursorRef.current = next;
     positionCursor(next);
     ensureVisible(next);
-    if (relNumRef.current) updateLineNumbers(next);
+    if (relNumRef.current) {
+      // Debounce line number updates during fast movement
+      if (lineNumTimer.current) clearTimeout(lineNumTimer.current);
+      lineNumTimer.current = setTimeout(() => updateLineNumbers(next), 50);
+    }
   }, [positionCursor, ensureVisible, updateLineNumbers]);
 
   // Reset cursor when file changes
