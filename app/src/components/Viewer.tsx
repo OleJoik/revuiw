@@ -198,7 +198,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
       body.removeEventListener("scroll", syncViewport);
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [filePath, loading]);
 
   useEffect(() => {
     if (!focused || !filePath || loading) return;
