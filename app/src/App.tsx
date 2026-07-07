@@ -5,7 +5,7 @@ import { OpenCodePanel } from "./components/OpenCodePanel";
 import { SelectionChat } from "./components/SelectionChat";
 import { useSetting } from "./hooks";
 import type { Panel } from "./types";
-import type { SelectionContext, SelectionThread } from "./opencode";
+import type { PopoverPlacement, SelectionContext, SelectionThread } from "./opencode";
 
 let threadSeq = 0;
 
@@ -38,9 +38,9 @@ export function App() {
     openChat();
   }, [openChat]);
 
-  const openSelectionChat = useCallback((ctx: SelectionContext) => {
+  const openSelectionChat = useCallback((ctx: SelectionContext, placement?: PopoverPlacement) => {
     const id = `sel-${Date.now().toString(36)}-${++threadSeq}`;
-    setThreads(prev => [...prev, { id, ...ctx, parentSessionId: mainSessionId, sessionId: null }]);
+    setThreads(prev => [...prev, { id, ...ctx, parentSessionId: mainSessionId, sessionId: null, placement }]);
     setOpenIds(prev => [...prev, id]);
   }, [mainSessionId, setThreads]);
 
@@ -54,9 +54,10 @@ export function App() {
     });
   }, [setThreads]);
 
-  const toggleThread = useCallback((id: string) => {
+  const toggleThread = useCallback((id: string, placement?: PopoverPlacement) => {
+    if (placement) setThreads(prev => prev.map(t => t.id === id ? { ...t, placement } : t));
     setOpenIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  }, []);
+  }, [setThreads]);
 
   const removeThread = useCallback((id: string) => {
     setOpenIds(prev => prev.filter(x => x !== id));

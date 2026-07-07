@@ -34,6 +34,11 @@ export interface SelectionContext {
   lang?: string;
 }
 
+export interface PopoverPlacement {
+  x: number;
+  y: number;
+}
+
 // A persistent selection-anchored chat. Survives closing the popover: the
 // anchor stays in the Viewer gutter and reopening reloads history from the
 // backing (forked) session.
@@ -41,6 +46,7 @@ export interface SelectionThread extends SelectionContext {
   id: string;
   parentSessionId: string | null; // session this forked from at creation
   sessionId: string | null;       // backing session, once a message is sent
+  placement?: PopoverPlacement;
 }
 
 export function threadContext(t: SelectionThread): SelectionContext {

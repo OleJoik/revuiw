@@ -14,8 +14,21 @@ interface Props {
   onPromote: (sessionId: string) => void;
 }
 
-// Offset each freshly-opened popover so stacked ones don't perfectly overlap.
-let spawnCount = 0;
+function textParts(msg: Message): string[] {
+  return (msg.parts || []).filter(p => p.type === "text").map(p => p.text || "");
+}
+
+function stripInjectedSelection(text: string): string {
+  return text.replace(/^Selected from `[^`]+` \(lines \d+[–-]\d+\):\s*```[^\n]*\n[\s\S]*?\n```\s*/, "");
+}
+
+function displayText(msg: Message): string {
+  const role = msg.info?.role || "unknown";
+  const parts = textParts(msg);
+  if (role !== "user") return parts.join("");
+  if (parts.length > 1 && parts[0].startsWith("Selected from `")) return parts.slice(1).join("\n");
+  return stripInjectedSelection(parts.join("\n"));
+}
 
 export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onPromote }: Props) {
   const [agent, setAgent] = useSetting<Agent>("oc:agent", "plan");
@@ -24,13 +37,14 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
   const [loading, setLoading] = useState(false);
   const [hasSession, setHasSession] = useState(!!thread.sessionId);
   const sessionRef = useRef<string | null>(thread.sessionId);
-  const [pos, setPos] = useState(() => {
-    const n = spawnCount++;
-    return { x: Math.max(60, window.innerWidth - 460 - (n % 4) * 28), y: 90 + (n % 4) * 28 };
-  });
+  const [pos, setPos] = useState(() => thread.placement || { x: Math.max(60, window.innerWidth - 460), y: 90 });
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (thread.placement && !dragOffset.current) setPos(thread.placement);
+  }, [thread.placement?.x, thread.placement?.y]);
 
   // Reload conversation history when (re)opening a thread that already has a session.
   useEffect(() => {
@@ -132,7 +146,7 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
         )}
         {messages.map((msg, i) => {
           const role = msg.info?.role || "unknown";
-          const text = (msg.parts || []).filter(p => p.type === "text").map(p => p.text).join("");
+          const text = displayText(msg);
           if (!text.trim()) return null;
           const isAssistant = role === "assistant";
           return (

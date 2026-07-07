@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { layout, prepare } from "@chenglou/pretext";
 import { useSetting } from "../hooks";
-import type { SelectionContext } from "../opencode";
+import type { PopoverPlacement, SelectionContext } from "../opencode";
 
 interface Anchor {
   id: string;
@@ -16,9 +16,9 @@ interface Props {
   focused: boolean;
   onFocus: () => void;
   onSendToChat: (ctx: SelectionContext) => void;
-  onOpenSelectionChat: (ctx: SelectionContext) => void;
+  onOpenSelectionChat: (ctx: SelectionContext, placement?: PopoverPlacement) => void;
   anchors?: Anchor[];
-  onAnchorClick?: (id: string) => void;
+  onAnchorClick?: (id: string, placement?: PopoverPlacement) => void;
 }
 
 type Token = { content: string; color?: string };
@@ -32,7 +32,14 @@ const CODE_PAD_LEFT = LINE_NUMBER_WIDTH;
 const CODE_PAD_RIGHT = 16;
 const TAB_SIZE = 2;
 const OVERSCAN_PX = 600;
+const POPOVER_WIDTH = 400;
+const POPOVER_ESTIMATED_HEIGHT = 420;
+const POPOVER_GAP = 8;
 const SCROLL_OFF_OPTIONS = [0, 3, 5, 8, 12];
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
 
 function clampLine(line: number, count: number) {
   if (count <= 0) return 0;
@@ -266,6 +273,25 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
     };
   }, [filePath, loading]);
 
+  const placementForRange = useCallback((start: number, end: number): PopoverPlacement | undefined => {
+    const body = bodyRef.current;
+    const startMetric = metrics[start];
+    const endMetric = metrics[end] ?? startMetric;
+    if (!body || !startMetric || !endMetric) return undefined;
+
+    const rect = body.getBoundingClientRect();
+    const selectionTop = rect.top + startMetric.top - body.scrollTop;
+    const selectionBottom = rect.top + endMetric.top + endMetric.height - body.scrollTop;
+    const x = clamp(rect.left + CODE_PAD_LEFT - body.scrollLeft, 12, window.innerWidth - POPOVER_WIDTH - 12);
+    const below = selectionBottom + POPOVER_GAP;
+    const above = selectionTop - POPOVER_GAP - POPOVER_ESTIMATED_HEIGHT;
+    const y = below + POPOVER_ESTIMATED_HEIGHT <= window.innerHeight - 12
+      ? below
+      : clamp(above, 12, window.innerHeight - POPOVER_ESTIMATED_HEIGHT - 12);
+
+    return { x, y };
+  }, [metrics]);
+
   useEffect(() => {
     if (!focused || !filePath || loading) return;
 
@@ -380,7 +406,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
           };
           // c -> attach to main chat (flow A); C -> open floating chat (flow B)
           if (e.key === "c") onSendToChat(sel);
-          else onOpenSelectionChat(sel);
+          else onOpenSelectionChat(sel, placementForRange(start, end));
           setVisualAnchor(null);
           break;
         }
@@ -389,7 +415,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onOpenSelectionChat]);
+  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onOpenSelectionChat, placementForRange]);
 
   useEffect(() => {
     if (!filePath) {
@@ -515,7 +541,11 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
                   className={`viewer-anchor ${a.open ? "open" : ""}`}
                   style={{ top: startMetric.top, height: endMetric.top + endMetric.height - startMetric.top }}
                   title={`Chat about lines ${a.startLine}\u2013${a.endLine}`}
-                  onMouseDown={e => { e.stopPropagation(); e.preventDefault(); onAnchorClick?.(a.id); }}
+                  onMouseDown={e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onAnchorClick?.(a.id, placementForRange(a.startLine - 1, a.endLine - 1));
+                  }}
                 />
               );
             })}
