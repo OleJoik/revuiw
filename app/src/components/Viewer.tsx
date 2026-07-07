@@ -360,10 +360,10 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
         return;
       }
 
-      if (cursorAnchors.length > 1 && (e.key === "]" || e.key === "[")) {
+      if (cursorAnchors.length > 1 && e.key === "Tab") {
         e.preventDefault();
         countRef.current = "";
-        setAnchorStackIndex(prev => (prev + (e.key === "]" ? 1 : -1) + cursorAnchors.length) % cursorAnchors.length);
+        setAnchorStackIndex(prev => (prev + (e.shiftKey ? -1 : 1) + cursorAnchors.length) % cursorAnchors.length);
         return;
       }
 
@@ -529,7 +529,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
               CHAT
               <span className="viewer-anchor-hint-keys">
                 {activeCursorAnchor.open ? "Enter close" : "Enter open"}
-                {cursorAnchors.length > 1 && ` · [ ] cycle ${activeAnchorIndex + 1}/${cursorAnchors.length}`}
+                {cursorAnchors.length > 1 && ` · Tab cycle ${activeAnchorIndex + 1}/${cursorAnchors.length}`}
               </span>
             </span>
           )}
