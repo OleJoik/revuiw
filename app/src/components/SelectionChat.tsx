@@ -41,6 +41,8 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "Escape") return;
@@ -64,6 +66,31 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Keep the latest onClose so the listeners below can subscribe just once.
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  // Auto-close once focus / interaction leaves this popover entirely.
+  useEffect(() => {
+    const closeIfOutside = (target: EventTarget | null) => {
+      if (target instanceof Node && rootRef.current && !rootRef.current.contains(target)) {
+        onCloseRef.current();
+      }
+    };
+    const onMouseDown = (e: MouseEvent) => closeIfOutside(e.target);
+    const onFocusIn = (e: FocusEvent) => {
+      // Ignore focus falling back to <body> (e.g. our input being disabled while
+      // a message sends) — that's not the user navigating away.
+      if (e.target === document.body || e.target === document.documentElement) return;
+      closeIfOutside(e.target);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("focusin", onFocusIn);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("focusin", onFocusIn);
+    };
+  }, []);
 
   // Dragging by the header
   useEffect(() => {
@@ -123,7 +150,7 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
   };
 
   return (
-    <div className="sel-chat" style={{ left: pos.x, top: pos.y }} onKeyDown={handleKeyDown}>
+    <div ref={rootRef} className="sel-chat" style={{ left: pos.x, top: pos.y }} onKeyDown={handleKeyDown}>
       <div className="sel-chat-header" onMouseDown={startDrag}>
         <span className="sel-chat-title" title={thread.path}>{selectionLabel(thread)}</span>
         <div className="sel-chat-header-actions">
