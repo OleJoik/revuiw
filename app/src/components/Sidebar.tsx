@@ -35,8 +35,10 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
   const [search, setSearch] = useState("");
   const [showHidden, setShowHidden] = useSetting("showHidden", false);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [treeActive, setTreeActive] = useState(false);
   const dragging = useRef(false);
   const treeRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Flatten visible nodes for keyboard cursor movement
   const visibleNodes = useMemo(() => {
@@ -84,20 +86,49 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
     saveExpanded(next);
   };
 
+  // Focus search input when panel receives focus, exit tree mode
+  useEffect(() => {
+    if (focused && open) {
+      setTreeActive(false);
+      searchRef.current?.focus();
+    }
+  }, [focused]);
+
   // Keyboard navigation when focused
   useEffect(() => {
     if (!focused || !open) return;
 
     const handleKey = (e: KeyboardEvent) => {
-      // Don't capture if user is typing in search
-      if (document.activeElement?.tagName === "INPUT") {
+      // Ctrl+j: enter tree navigation mode
+      if (e.ctrlKey && e.key === "j") {
+        e.preventDefault();
+        setTreeActive(true);
+        searchRef.current?.blur();
+        // Place cursor on first item if none
+        if (!cursor && visibleNodes.length > 0) setCursor(visibleNodes[0].path);
+        return;
+      }
+
+      // Ctrl+k: back to search mode
+      if (e.ctrlKey && e.key === "k") {
+        e.preventDefault();
+        setTreeActive(false);
+        searchRef.current?.focus();
+        return;
+      }
+
+      // If in search mode, only handle Escape to enter tree
+      if (!treeActive) {
         if (e.key === "Escape") {
-          (document.activeElement as HTMLElement).blur();
           e.preventDefault();
+          setTreeActive(true);
+          searchRef.current?.blur();
+          if (!cursor && visibleNodes.length > 0) setCursor(visibleNodes[0].path);
         }
         return;
       }
 
+      // Tree navigation mode
       const cursorIdx = cursor ? visibleNodes.findIndex(n => n.path === cursor) : -1;
 
       switch (e.key) {
@@ -147,10 +178,10 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
           break;
         }
         case "/": {
-          // Focus search
+          // Back to search
           e.preventDefault();
-          const input = treeRef.current?.parentElement?.querySelector<HTMLInputElement>(".sidebar-search input");
-          input?.focus();
+          setTreeActive(false);
+          searchRef.current?.focus();
           break;
         }
       }
@@ -158,7 +189,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [focused, open, cursor, visibleNodes, expanded]);
+  }, [focused, open, cursor, visibleNodes, expanded, treeActive]);
 
   // Scroll cursor into view
   useEffect(() => {
@@ -219,6 +250,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
       </div>
       <div className="sidebar-search">
         <input
+          ref={searchRef}
           type="text"
           placeholder="Search files..."
           value={search}
@@ -230,7 +262,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
           title="Show hidden files"
         >.*</button>
       </div>
-      <div className="sidebar-tree" ref={treeRef}>
+      <div className={`sidebar-tree ${treeActive ? "tree-navigating" : ""}`} ref={treeRef}>
         {tree ? (
           <TreeView
             node={tree}
@@ -239,8 +271,8 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
             onToggle={toggleExpand}
             onSelect={onSelectFile}
             search={search.toLowerCase()}
-            cursor={cursor}
-            onCursor={setCursor}
+            cursor={treeActive ? cursor : null}
+            onCursor={(path) => { setCursor(path); setTreeActive(true); searchRef.current?.blur(); }}
             isRoot
           />
         ) : (
