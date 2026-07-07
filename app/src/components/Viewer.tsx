@@ -582,7 +582,10 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
                     />
                   )}
                   {isActive && (
-                    <div className="viewer-thread-hint" style={{ top: startMetric.top + 2 }}>
+                    <div
+                      className="viewer-thread-hint"
+                      style={{ top: startMetric.top + 2, left: viewport.scrollLeft + CODE_PAD_LEFT + 8 }}
+                    >
                       <span>{a.open ? "Enter close" : "Enter open"}</span>
                       {cursorAnchors.length > 1 && <span>{activeAnchorIndex + 1}/{cursorAnchors.length} [ ]</span>}
                     </div>

@@ -1038,10 +1038,10 @@ html, body, #root {
 
 .viewer-thread-hint {
   position: absolute;
-  right: 10px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  max-width: calc(100vw - 48px);
   padding: 2px 6px;
   border: 1px solid rgba(166, 227, 161, 0.35);
   border-radius: 4px;
