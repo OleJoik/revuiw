@@ -28,18 +28,23 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const lineCountRef = useRef(lineCount);
   lineCountRef.current = lineCount;
 
-  // Build gutter text — single string, one DOM write
+  // Render only visible gutter numbers. Full-file relative gutters are too expensive.
   const updateGutter = useCallback((cursor: number) => {
     const el = gutterRef.current;
-    if (!el) return;
+    const body = bodyRef.current;
+    if (!el || !body) return;
     const count = lineCountRef.current;
     const rel = relNumRef.current;
-    const lines = new Array(count);
-    for (let i = 0; i < count; i++) {
-      lines[i] = rel
+    const first = Math.max(0, Math.floor((body.scrollTop - PRE_PAD_TOP) / LINE_HEIGHT) - 2);
+    const last = Math.min(count - 1, Math.ceil((body.scrollTop + body.clientHeight - PRE_PAD_TOP) / LINE_HEIGHT) + 2);
+    const lines = new Array(last - first + 1);
+
+    for (let i = first; i <= last; i++) {
+      lines[i - first] = rel
         ? (i === cursor ? String(i + 1) : String(Math.abs(i - cursor)))
         : String(i + 1);
     }
+    el.style.transform = `translateY(${PRE_PAD_TOP + first * LINE_HEIGHT}px)`;
     el.textContent = lines.join("\n");
   }, []);
 
@@ -97,6 +102,15 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   useEffect(() => {
     updateGutter(cursorRef.current);
   }, [relNum, updateGutter]);
+
+  // Keep virtual gutter aligned when native scrollbars/mouse wheel move the viewport.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const onScroll = () => updateGutter(cursorRef.current);
+    body.addEventListener("scroll", onScroll);
+    return () => body.removeEventListener("scroll", onScroll);
+  }, [updateGutter]);
 
   // Vim-like keyboard navigation
   useEffect(() => {
