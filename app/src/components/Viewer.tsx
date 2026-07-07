@@ -107,6 +107,11 @@ function renderTokenLine(line: Token[]) {
   ));
 }
 
+function renderLine(tokens: Token[][] | null, plainLines: string[], i: number) {
+  const tokenLine = tokens?.[i];
+  return tokenLine ? renderTokenLine(tokenLine) : plainLines[i];
+}
+
 export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const [content, setContent] = useState("");
   const [tokens, setTokens] = useState<Token[][] | null>(null);
@@ -119,10 +124,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const cursorRef = useRef(0);
 
   const plainLines = useMemo(() => content.split("\n"), [content]);
-  const lines = useMemo(
-    () => tokens?.map(line => line.map(token => token.content).join("")) ?? plainLines,
-    [plainLines, tokens],
-  );
+  const lines = plainLines;
   const lineCount = lines.length;
   const maxLineLength = useMemo(() => Math.max(1, ...lines.map(line => expandTabs(line).length)), [lines]);
   const wrapWidth = Math.max(1, viewport.width - CODE_PAD_LEFT - CODE_PAD_RIGHT);
@@ -371,7 +373,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
                     >
                       <span className="line-number">{lineNumber}</span>
                       <span className="line-content">
-                        {tokens ? renderTokenLine(tokens[i]) : plainLines[i]}
+                        {renderLine(tokens, plainLines, i)}
                       </span>
                     </span>
                   );
