@@ -336,6 +336,19 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
     setAnchorStackIndex(0);
   }, [cursorLine, filePath]);
 
+  // When the viewer gains focus, blur any lingering input/textarea from other
+  // panels so that keydown events target the document (not a foreign input).
+  useEffect(() => {
+    if (!focused) return;
+    const el = document.activeElement as HTMLElement | null;
+    if (
+      el && el !== document.body &&
+      (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
+    ) {
+      el.blur();
+    }
+  }, [focused]);
+
   useEffect(() => {
     if (!focused || !filePath || loading) return;
 
