@@ -39,8 +39,16 @@ html, body, #root {
 /* ---- Panel focus indicator ---- */
 
 .panel-focused {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  position: relative;
+}
+
+.panel-focused::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--accent);
+  pointer-events: none;
+  z-index: 9999;
 }
 
 /* ---- Tree cursor ---- */
