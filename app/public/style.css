@@ -412,7 +412,7 @@ html, body, #root {
   display: inline-block;
   width: 4ch;
   padding-right: 1.5ch;
-  margin-right: 1.5ch;
+  margin-right: 2.5ch;
   border-right: 1px solid var(--border);
   text-align: right;
   color: var(--fg-muted);
