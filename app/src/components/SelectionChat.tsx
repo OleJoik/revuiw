@@ -42,6 +42,13 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    onClose();
+  };
+
   useEffect(() => {
     if (thread.placement && !dragOffset.current) setPos(thread.placement);
   }, [thread.placement?.x, thread.placement?.y]);
@@ -116,7 +123,7 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
   };
 
   return (
-    <div className="sel-chat" style={{ left: pos.x, top: pos.y }}>
+    <div className="sel-chat" style={{ left: pos.x, top: pos.y }} onKeyDown={handleKeyDown}>
       <div className="sel-chat-header" onMouseDown={startDrag}>
         <span className="sel-chat-title" title={thread.path}>{selectionLabel(thread)}</span>
         <div className="sel-chat-header-actions">
