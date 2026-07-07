@@ -411,7 +411,7 @@ html, body, #root {
 .viewer-body .line-number {
   display: inline-block;
   width: 4ch;
-  margin-right: 1.5ch;
+  margin-right: 3ch;
   text-align: right;
   color: var(--fg-muted);
   opacity: 0.5;
