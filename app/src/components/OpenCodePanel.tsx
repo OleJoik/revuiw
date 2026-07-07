@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { useSetting } from "../hooks";
@@ -19,7 +19,12 @@ const purifyConfig: DOMPurify.Config = {
 
 function renderMarkdown(text: string): string {
   const raw = marked.parse(text) as string;
-  return DOMPurify.sanitize(raw, purifyConfig);
+  const clean = DOMPurify.sanitize(raw, purifyConfig);
+  // Wrap <pre> blocks with a container for copy button
+  return clean.replace(
+    /<pre>([\s\S]*?)<\/pre>/g,
+    '<div class="oc-code-wrap"><pre>$1</pre><button class="oc-copy-btn" type="button">Copy</button></div>'
+  );
 }
 
 interface Props {
@@ -93,6 +98,18 @@ export function OpenCodePanel({ open, onToggle }: Props) {
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Delegated click handler for copy buttons in rendered markdown
+  const handleMessagesClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains("oc-copy-btn")) return;
+    const wrap = target.closest(".oc-code-wrap");
+    const code = wrap?.querySelector("code");
+    if (!code) return;
+    navigator.clipboard.writeText(code.textContent || "");
+    target.textContent = "Copied";
+    setTimeout(() => { target.textContent = "Copy"; }, 1500);
+  }, []);
 
   const selectSession = async (session: Session) => {
     setCurrentSession(session);
@@ -186,7 +203,7 @@ export function OpenCodePanel({ open, onToggle }: Props) {
         </div>
       </div>
       <div className="oc-chat">
-        <div className="oc-messages">
+        <div className="oc-messages" onClick={handleMessagesClick}>
           {messages.length === 0 && <div className="oc-empty">Send a message to start</div>}
           {messages.map((msg, i) => {
             const role = msg.info?.role || "unknown";

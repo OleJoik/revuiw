@@ -624,14 +624,16 @@ html, body, #root {
 .oc-markdown {
   font-size: 11px;
   line-height: 1.5;
+  white-space: normal;
 }
 
-.oc-markdown p {
-  margin: 0 0 0.4em;
+/* Reset all child margins, control spacing via sibling combinator */
+.oc-markdown > * {
+  margin: 0;
 }
 
-.oc-markdown p:last-child {
-  margin-bottom: 0;
+.oc-markdown > * + * {
+  margin-top: 0.4em;
 }
 
 .oc-markdown strong {
@@ -644,56 +646,60 @@ html, body, #root {
 }
 
 .oc-markdown code {
-  background: var(--bg-hover);
-  padding: 1px 4px;
+  background: var(--bg-active);
+  padding: 1px 5px;
   border-radius: 3px;
   font-family: var(--font);
   font-size: 10px;
+  border: 1px solid var(--border);
 }
 
 .oc-markdown pre {
-  background: var(--bg-alt);
+  background: #11111b;
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 6px 8px;
-  margin: 4px 0;
   overflow-x: auto;
+  position: relative;
 }
 
 .oc-markdown pre code {
   background: none;
   padding: 0;
+  border: none;
   font-size: 10px;
   line-height: 1.4;
 }
 
 .oc-markdown ul,
 .oc-markdown ol {
-  margin: 4px 0;
   padding-left: 16px;
 }
 
 .oc-markdown li {
-  margin: 2px 0;
+  margin: 0;
+}
+
+.oc-markdown li + li {
+  margin-top: 2px;
 }
 
 .oc-markdown h1,
 .oc-markdown h2,
 .oc-markdown h3,
 .oc-markdown h4 {
-  margin: 6px 0 3px;
-  font-size: 11px;
   font-weight: 700;
   color: var(--fg);
 }
 
 .oc-markdown h1 { font-size: 13px; }
 .oc-markdown h2 { font-size: 12px; }
+.oc-markdown h3,
+.oc-markdown h4 { font-size: 11px; }
 
 .oc-markdown blockquote {
   border-left: 2px solid var(--border);
   padding-left: 8px;
-  margin: 4px 0;
   color: var(--fg-muted);
 }
 
@@ -709,5 +715,34 @@ html, body, #root {
 .oc-markdown hr {
   border: none;
   border-top: 1px solid var(--border);
-  margin: 6px 0;
+}
+
+/* Copy button for code blocks */
+.oc-code-wrap {
+  position: relative;
+}
+
+.oc-code-wrap .oc-copy-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 6px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg-muted);
+  font-family: var(--font);
+  font-size: 9px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.oc-code-wrap:hover .oc-copy-btn {
+  opacity: 1;
+}
+
+.oc-code-wrap .oc-copy-btn:hover {
+  color: var(--fg);
+  background: var(--bg-active);
 }
