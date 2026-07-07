@@ -87,6 +87,32 @@ await initHighlighter();
 const OPENCODE_URL = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
 const opencode = createOpencodeClient({ baseUrl: OPENCODE_URL });
 
+interface SelectionContext {
+  path: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+  lang?: string;
+}
+
+type PromptPart = { type: "text"; text: string };
+
+// Build the parts array for a prompt. A visual selection is injected as a
+// clearly-labelled fenced code block so the model sees exactly what the user
+// highlighted. This can be upgraded to a first-class FilePartInput (with a
+// FileSource range) once URL/mime handling is validated against the server.
+function buildPromptParts(message: string, context?: SelectionContext | null): PromptPart[] {
+  const parts: PromptPart[] = [];
+  if (context && context.text.trim()) {
+    const lang = context.lang || "";
+    const header = `Selected from \`${context.path}\` (lines ${context.startLine}\u2013${context.endLine}):`;
+    const fenced = "```" + lang + "\n" + context.text + "\n```";
+    parts.push({ type: "text", text: `${header}\n${fenced}` });
+  }
+  if (message.trim()) parts.push({ type: "text", text: message });
+  return parts;
+}
+
 const EXCLUDED = new Set(["node_modules", ".git", "dist"]);
 const ROOTS_FILE = join(homedir(), ".filetree", "roots.json");
 
@@ -318,13 +344,32 @@ Bun.serve({
       if (sessionPromptMatch && req.method === "POST") {
         const sessionId = sessionPromptMatch[1];
         const body = await req.json();
+        const parts = buildPromptParts(body.message ?? "", body.context);
+        if (parts.length === 0) {
+          return new Response(JSON.stringify({ error: "Empty prompt" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        }
         const { data, error } = await opencode.session.prompt({
           path: { id: sessionId },
           body: {
-            parts: [{ type: "text", text: body.message }],
+            ...(body.agent ? { agent: body.agent } : {}),
+            parts,
           },
         });
         if (error) return new Response(JSON.stringify({ error: "Failed to send prompt" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(data), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const sessionForkMatch = pathname.match(/^\/api\/opencode\/sessions\/([^/]+)\/fork$/);
+      if (sessionForkMatch && req.method === "POST") {
+        const sessionId = sessionForkMatch[1];
+        const body = await req.json().catch(() => ({}));
+        const { data, error } = await opencode.session.fork({
+          path: { id: sessionId },
+          body: body.messageID ? { messageID: body.messageID } : {},
+        });
+        if (error) return new Response(JSON.stringify({ error: "Failed to fork session" }), { status: 502, headers: { "Content-Type": "application/json" } });
         return new Response(JSON.stringify(data), {
           headers: { "Content-Type": "application/json" },
         });

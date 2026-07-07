@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { layout, prepare } from "@chenglou/pretext";
 import { useSetting } from "../hooks";
+import type { SelectionContext } from "../opencode";
 
 interface Props {
   filePath: string | null;
   onClose: () => void;
   focused: boolean;
   onFocus: () => void;
+  onSendToChat: (ctx: SelectionContext) => void;
+  onOpenSelectionChat: (ctx: SelectionContext) => void;
 }
 
 type Token = { content: string; color?: string };
@@ -134,9 +137,10 @@ function nextScrollOff(value: number) {
   return next ?? SCROLL_OFF_OPTIONS[0];
 }
 
-export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
+export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOpenSelectionChat }: Props) {
   const [content, setContent] = useState("");
   const [tokens, setTokens] = useState<Token[][] | null>(null);
+  const [lang, setLang] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [wrap, setWrap] = useSetting("viewer:wrap", false);
   const [relNum, setRelNum] = useSetting("viewer:relnumber", false);
@@ -345,12 +349,32 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
           e.preventDefault();
           setVisualAnchor(anchor => anchor === null ? cursorRef.current : null);
           break;
+        case "c":
+        case "C": {
+          e.preventDefault();
+          if (!filePath) break;
+          const cur = cursorRef.current;
+          const start = visualAnchor === null ? cur : Math.min(visualAnchor, cur);
+          const end = visualAnchor === null ? cur : Math.max(visualAnchor, cur);
+          const sel: SelectionContext = {
+            path: filePath,
+            startLine: start + 1,
+            endLine: end + 1,
+            text: plainLines.slice(start, end + 1).join("\n"),
+            lang: lang || undefined,
+          };
+          // c -> attach to main chat (flow A); C -> open floating chat (flow B)
+          if (e.key === "c") onSendToChat(sel);
+          else onOpenSelectionChat(sel);
+          setVisualAnchor(null);
+          break;
+        }
       }
     };
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor]);
+  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onOpenSelectionChat]);
 
   useEffect(() => {
     if (!filePath) {
@@ -368,6 +392,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
       .then(data => {
         if (cancelled) return;
         setContent(data.content || "");
+        setLang(data.lang || null);
         setLoading(false);
 
         if (data.lang) {
@@ -420,7 +445,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
         <span className="viewer-path">{filePath}</span>
         <div className="viewer-actions">
           {visualAnchor !== null && (
-            <span className="viewer-mode">VISUAL LINE</span>
+            <span className="viewer-mode">VISUAL LINE <span className="viewer-mode-hint">c chat · C float</span></span>
           )}
           <button
             className={`viewer-wrap-toggle ${relNum ? "active" : ""}`}

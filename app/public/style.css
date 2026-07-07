@@ -833,3 +833,198 @@ html, body, #root {
   color: var(--fg);
   background: var(--bg-active);
 }
+
+/* ---- Visual-mode hint ---- */
+
+.viewer-mode-hint {
+  margin-left: 6px;
+  font-weight: 400;
+  opacity: 0.7;
+  font-size: 9px;
+}
+
+/* ---- Selection context chip (main panel) ---- */
+
+.oc-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px 0;
+  flex-shrink: 0;
+}
+
+.oc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 7px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  font-size: 10px;
+  color: var(--accent);
+  max-width: 100%;
+}
+
+.oc-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oc-chip-remove {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.oc-chip-remove:hover {
+  color: var(--fg);
+}
+
+/* ---- Plan / Do agent toggle ---- */
+
+.oc-agent-toggle {
+  display: flex;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.oc-agent-toggle button {
+  padding: 4px 7px;
+  background: var(--bg);
+  border: none;
+  color: var(--fg-muted);
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.oc-agent-toggle button:hover {
+  color: var(--fg);
+}
+
+.oc-agent-toggle button.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* ---- Selection chat popover (flow B) ---- */
+
+.sel-chat {
+  position: fixed;
+  width: 400px;
+  max-height: 60vh;
+  z-index: 500;
+  background: var(--bg-alt);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sel-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  flex-shrink: 0;
+}
+
+.sel-chat-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sel-chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sel-chat-promote {
+  padding: 2px 7px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.sel-chat-promote:hover:not(:disabled) {
+  background: var(--bg-active);
+  color: var(--accent);
+}
+
+.sel-chat-promote:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sel-chat-close {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.sel-chat-close:hover {
+  color: var(--fg);
+}
+
+.sel-chat-context {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 90px;
+  overflow: auto;
+  background: #11111b;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--fg-file);
+  white-space: pre;
+  flex-shrink: 0;
+}
+
+.sel-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 80px;
+}
+
+.sel-chat-messages::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sel-chat-messages::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}

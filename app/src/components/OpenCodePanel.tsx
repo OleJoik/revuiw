@@ -1,63 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
 import { useSetting } from "../hooks";
-
-// Configure marked for safe, compact output
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-});
-
-// DOMPurify config matching OpenCode's web UI
-const purifyConfig: DOMPurify.Config = {
-  USE_PROFILES: { html: true },
-  FORBID_TAGS: ["style"],
-  FORBID_CONTENTS: ["style", "script"],
-  ADD_ATTR: ["target"],
-};
-
-function renderMarkdown(text: string): string {
-  const raw = marked.parse(text) as string;
-  const clean = DOMPurify.sanitize(raw, purifyConfig);
-  // Wrap <pre> blocks with a container for copy button
-  return clean.replace(
-    /<pre>([\s\S]*?)<\/pre>/g,
-    '<div class="oc-code-wrap"><pre>$1</pre><button class="oc-copy-btn" type="button">Copy</button></div>'
-  );
-}
+import { renderMarkdown, handleCopyClick } from "../markdown";
+import {
+  listSessions, createSession, getMessages, sendPrompt, selectionLabel,
+  type Session, type Message, type Agent, type SelectionContext,
+} from "../opencode";
 
 interface Props {
   open: boolean;
   onToggle: () => void;
   focused: boolean;
   onFocus: () => void;
+  pendingSelection: SelectionContext | null;
+  onConsumeSelection: () => void;
+  onSessionChange: (id: string | null) => void;
+  activateSession: { id: string; token: number } | null;
 }
 
-interface Session {
-  id: string;
-  title?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface MessagePart {
-  type: string;
-  text?: string;
-  toolName?: string;
-}
-
-interface Message {
-  info?: { role?: string };
-  parts?: MessagePart[];
-}
-
-export function OpenCodePanel({ open, onToggle, focused, onFocus }: Props) {
+export function OpenCodePanel({
+  open, onToggle, focused, onFocus,
+  pendingSelection, onConsumeSelection, onSessionChange, activateSession,
+}: Props) {
   const [width, setWidth] = useSetting("oc:width", 340);
+  const [agent, setAgent] = useSetting<Agent>("oc:agent", "plan");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [attached, setAttached] = useState<SelectionContext | null>(null);
   const [loading, setLoading] = useState(false);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,14 +58,39 @@ export function OpenCodePanel({ open, onToggle, focused, onFocus }: Props) {
     document.body.style.userSelect = "none";
   };
 
-  // Load sessions
+  const selectSession = useCallback(async (session: Session) => {
+    setCurrentSession(session);
+    setMessages([]);
+    const msgs = await getMessages(session.id);
+    setMessages(msgs);
+  }, []);
+
+  // Load sessions when opened
   useEffect(() => {
     if (!open) return;
-    fetch("/api/opencode/sessions")
-      .then(r => r.ok ? r.json() : [])
-      .then(setSessions)
-      .catch(() => setSessions([]));
+    listSessions().then(setSessions).catch(() => setSessions([]));
   }, [open]);
+
+  // Report the active main-session id upward so popovers know what to fork
+  useEffect(() => {
+    onSessionChange(currentSession?.id ?? null);
+  }, [currentSession, onSessionChange]);
+
+  // Adopt a selection sent from the Viewer as an attached context chip
+  useEffect(() => {
+    if (!pendingSelection) return;
+    setAttached(pendingSelection);
+    onConsumeSelection();
+    inputRef.current?.focus();
+  }, [pendingSelection, onConsumeSelection]);
+
+  // Switch to a session on external request (e.g. promoted from a popover)
+  useEffect(() => {
+    if (!activateSession) return;
+    const existing = sessions.find(s => s.id === activateSession.id);
+    selectSession(existing ?? { id: activateSession.id });
+    listSessions().then(setSessions).catch(() => {});
+  }, [activateSession?.token]);
 
   // Scroll to bottom
   useEffect(() => {
@@ -112,66 +107,37 @@ export function OpenCodePanel({ open, onToggle, focused, onFocus }: Props) {
     if (focused && open && !loading) inputRef.current?.focus();
   }, [focused]);
 
-  // Delegated click handler for copy buttons in rendered markdown
-  const handleMessagesClick = useCallback((e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (!target.classList.contains("oc-copy-btn")) return;
-    const wrap = target.closest(".oc-code-wrap");
-    const code = wrap?.querySelector("code");
-    if (!code) return;
-    navigator.clipboard.writeText(code.textContent || "");
-    target.textContent = "Copied";
-    setTimeout(() => { target.textContent = "Copy"; }, 1500);
-  }, []);
-
-  const selectSession = async (session: Session) => {
-    setCurrentSession(session);
-    setMessages([]);
-    try {
-      const res = await fetch(`/api/opencode/sessions/${session.id}/messages`);
-      if (res.ok) setMessages(await res.json());
-    } catch {}
-  };
-
-  const createSession = async (title?: string) => {
-    const res = await fetch("/api/opencode/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: title || "revuiw session" }),
-    });
-    if (!res.ok) return null;
-    const session = await res.json();
+  const createNewSession = async (title?: string) => {
+    const session = await createSession(title);
+    if (!session) return null;
     setSessions(prev => [session, ...prev]);
     setCurrentSession(session);
     setMessages([]);
     return session;
   };
 
-  const sendPrompt = async () => {
+  const send = async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if ((!text && !attached) || loading) return;
 
     let session = currentSession;
     if (!session) {
-      session = await createSession(text.slice(0, 50));
+      session = await createNewSession(text.slice(0, 50) || "revuiw session");
       if (!session) return;
     }
 
+    const context = attached;
     setInput("");
+    setAttached(null);
     setLoading(true);
 
-    // Optimistic user message
-    setMessages(prev => [...prev, { info: { role: "user" }, parts: [{ type: "text", text }] }]);
+    // Optimistic user message (note the attached context, if any)
+    const userText = context ? `\`${selectionLabel(context)}\`\n${text}` : text;
+    setMessages(prev => [...prev, { info: { role: "user" }, parts: [{ type: "text", text: userText }] }]);
 
     try {
-      const res = await fetch(`/api/opencode/sessions/${session.id}/prompt`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      const data = await res.json();
-      setMessages(prev => [...prev, { info: { role: "assistant" }, parts: data.parts || [] }]);
+      const reply = await sendPrompt({ sessionId: session.id, message: text, agent, context });
+      setMessages(prev => [...prev, reply]);
     } catch (err: any) {
       setMessages(prev => [...prev, { info: { role: "error" }, parts: [{ type: "text", text: err.message }] }]);
     }
@@ -200,7 +166,7 @@ export function OpenCodePanel({ open, onToggle, focused, onFocus }: Props) {
       <div className="oc-sessions">
         <div className="oc-sessions-header">
           <span>Sessions</span>
-          <button onClick={() => createSession()}>+ New</button>
+          <button onClick={() => createNewSession()}>+ New</button>
         </div>
         <div className="oc-session-list">
           {sorted.length === 0 && <div className="oc-empty">No sessions</div>}
@@ -216,7 +182,7 @@ export function OpenCodePanel({ open, onToggle, focused, onFocus }: Props) {
         </div>
       </div>
       <div className="oc-chat">
-        <div className="oc-messages" onClick={handleMessagesClick}>
+        <div className="oc-messages" onClick={handleCopyClick}>
           {messages.length === 0 && <div className="oc-empty">Send a message to start</div>}
           {messages.map((msg, i) => {
             const role = msg.info?.role || "unknown";
@@ -242,17 +208,29 @@ export function OpenCodePanel({ open, onToggle, focused, onFocus }: Props) {
           {loading && <div className="oc-msg status">Thinking...</div>}
           <div ref={messagesEnd} />
         </div>
+        {attached && (
+          <div className="oc-chip-row">
+            <span className="oc-chip" title={attached.path}>
+              <span className="oc-chip-label">{selectionLabel(attached)}</span>
+              <button className="oc-chip-remove" onClick={() => setAttached(null)} title="Remove context">&times;</button>
+            </span>
+          </div>
+        )}
         <div className="oc-input-row">
+          <div className="oc-agent-toggle" title="Plan = discuss only · Do = can edit files">
+            <button className={agent === "plan" ? "active" : ""} onClick={() => setAgent("plan")}>Plan</button>
+            <button className={agent === "build" ? "active" : ""} onClick={() => setAgent("build")}>Do</button>
+          </div>
           <input
             ref={inputRef}
             type="text"
-            placeholder="Ask a question..."
+            placeholder={agent === "plan" ? "Discuss (no changes)..." : "Ask to make changes..."}
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
             disabled={loading}
           />
-          <button onClick={sendPrompt} disabled={loading || !input.trim()}>Send</button>
+          <button onClick={send} disabled={loading || (!input.trim() && !attached)}>Send</button>
         </div>
       </div>
     </div>
