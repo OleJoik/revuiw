@@ -524,6 +524,15 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
           {visualAnchor !== null && (
             <span className="viewer-mode">VISUAL LINE <span className="viewer-mode-hint">c chat · C float</span></span>
           )}
+          {visualAnchor === null && activeCursorAnchor && (
+            <span className={`viewer-anchor-hint ${activeCursorAnchor.open ? "open" : ""}`}>
+              CHAT
+              <span className="viewer-anchor-hint-keys">
+                {activeCursorAnchor.open ? "Enter close" : "Enter open"}
+                {cursorAnchors.length > 1 && ` · [ ] cycle ${activeAnchorIndex + 1}/${cursorAnchors.length}`}
+              </span>
+            </span>
+          )}
           <button
             className={`viewer-wrap-toggle ${relNum ? "active" : ""}`}
             onClick={() => setRelNum(!relNum)}
@@ -580,15 +589,6 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
                       className={`viewer-thread-highlight ${a.open ? "open" : "preview"}`}
                       style={{ top: startMetric.top, height }}
                     />
-                  )}
-                  {isActive && (
-                    <div
-                      className="viewer-thread-hint"
-                      style={{ top: startMetric.top + 2, left: viewport.scrollLeft + CODE_PAD_LEFT + 8 }}
-                    >
-                      <span>{a.open ? "Enter close" : "Enter open"}</span>
-                      {cursorAnchors.length > 1 && <span>{activeAnchorIndex + 1}/{cursorAnchors.length} [ ]</span>}
-                    </div>
                   )}
                   <button
                     className={`viewer-anchor ${a.open ? "open" : ""}`}
