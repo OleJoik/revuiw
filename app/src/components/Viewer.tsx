@@ -191,7 +191,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
           <button className="viewer-close" onClick={onClose}>&times;</button>
         </div>
       </div>
-      <div className={`viewer-body ${wrap ? "wrap" : "nowrap"}`} ref={bodyRef}>
+      <div className={`viewer-body ${wrap ? "wrap" : "nowrap"} ${relNum ? "rel-numbers" : ""}`} ref={bodyRef}>
         {loading ? (
           <div className="viewer-loading">Loading...</div>
         ) : tokens ? (
