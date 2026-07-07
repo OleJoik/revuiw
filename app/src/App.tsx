@@ -38,19 +38,27 @@ export function App() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      // Ctrl+e: open+focus explorer
+      // Ctrl+e: toggle explorer
       if (e.ctrlKey && e.key === "e") {
         e.preventDefault();
-        if (!sidebarOpen) setSidebarOpen(true);
-        setFocusedPanel("sidebar");
+        if (sidebarOpen && focusedPanel === "sidebar") {
+          setSidebarOpen(false);
+        } else {
+          if (!sidebarOpen) setSidebarOpen(true);
+          setFocusedPanel("sidebar");
+        }
         return;
       }
 
-      // Ctrl+s: open+focus chat
+      // Ctrl+s: toggle chat
       if (e.ctrlKey && e.key === "s") {
         e.preventDefault();
-        if (!ocOpen) setOcOpen(true);
-        setFocusedPanel("chat");
+        if (ocOpen && focusedPanel === "chat") {
+          setOcOpen(false);
+        } else {
+          if (!ocOpen) setOcOpen(true);
+          setFocusedPanel("chat");
+        }
         return;
       }
 

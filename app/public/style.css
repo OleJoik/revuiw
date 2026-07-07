@@ -47,6 +47,9 @@ html, body, #root {
 
 .tree-node.cursor {
   background: var(--bg-hover);
+}
+
+.tree-navigating .tree-node.cursor {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }

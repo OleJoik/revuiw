@@ -271,7 +271,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
             onToggle={toggleExpand}
             onSelect={onSelectFile}
             search={search.toLowerCase()}
-            cursor={treeActive ? cursor : null}
+            cursor={cursor}
             onCursor={(path) => { setCursor(path); setTreeActive(true); searchRef.current?.blur(); }}
             isRoot
           />
