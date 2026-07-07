@@ -19,17 +19,26 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
   const cursorRef = useRef(0);
   const relNumRef = useRef(relNum);
   relNumRef.current = relNum;
+  const rafRef = useRef<number | null>(null);
+  const pendingCursor = useRef<number | null>(null);
 
   const lineCount = tokens ? tokens.length : content.split("\n").length;
   const lineCountRef = useRef(lineCount);
   lineCountRef.current = lineCount;
 
-  // Update line numbers in the DOM directly
+  // Update only visible line numbers in the DOM
   const updateLineNumbers = useCallback((cursor: number) => {
+    const body = bodyRef.current;
+    if (!body) return;
     const els = lineEls.current;
-    const count = lineCountRef.current;
     const rel = relNumRef.current;
-    for (let i = 0; i < count; i++) {
+    const lineHeight = els[0]?.offsetHeight || 18;
+    const scrollTop = body.scrollTop;
+    const viewHeight = body.clientHeight;
+    const firstVisible = Math.max(0, Math.floor(scrollTop / lineHeight) - 2);
+    const lastVisible = Math.min(lineCountRef.current - 1, Math.ceil((scrollTop + viewHeight) / lineHeight) + 2);
+
+    for (let i = firstVisible; i <= lastVisible; i++) {
       const el = els[i];
       if (!el) continue;
       const numEl = el.firstElementChild as HTMLElement;
@@ -40,24 +49,64 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     }
   }, []);
 
-  // Move cursor via DOM manipulation (no re-render)
-  const moveCursor = useCallback((next: number) => {
+  // Flush pending cursor move in animation frame
+  const flushCursor = useCallback(() => {
+    rafRef.current = null;
+    const next = pendingCursor.current;
+    if (next === null) return;
+    pendingCursor.current = null;
+
     const prev = cursorRef.current;
     if (next === prev) return;
+
     const oldEl = lineEls.current[prev];
     const newEl = lineEls.current[next];
     if (oldEl) oldEl.classList.remove("cursor-line");
-    if (newEl) {
-      newEl.classList.add("cursor-line");
-      newEl.scrollIntoView({ block: "nearest" });
-    }
+    if (newEl) newEl.classList.add("cursor-line");
     cursorRef.current = next;
+
+    // Manual scroll instead of scrollIntoView (avoids forced reflow)
+    const body = bodyRef.current;
+    if (body && newEl) {
+      const elTop = newEl.offsetTop;
+      const elHeight = newEl.offsetHeight;
+      const scrollTop = body.scrollTop;
+      const viewHeight = body.clientHeight;
+
+      if (elTop < scrollTop) {
+        body.scrollTop = elTop;
+      } else if (elTop + elHeight > scrollTop + viewHeight) {
+        body.scrollTop = elTop + elHeight - viewHeight;
+      }
+    }
+
     if (relNumRef.current) updateLineNumbers(next);
   }, [updateLineNumbers]);
+
+  // Schedule cursor move batched to next animation frame
+  const moveCursor = useCallback((next: number) => {
+    pendingCursor.current = next;
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(flushCursor);
+    }
+  }, [flushCursor]);
+
+  // Immediate move (for clicks, file change, etc.)
+  const moveCursorImmediate = useCallback((next: number) => {
+    pendingCursor.current = next;
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    flushCursor();
+  }, [flushCursor]);
 
   // Reset cursor when file changes
   useEffect(() => {
     cursorRef.current = 0;
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
   }, [filePath]);
 
   // Sync cursor-line class when focus changes
@@ -211,7 +260,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
               className="line"
               key={i}
               ref={(el) => setLineRef(i, el)}
-              onMouseDown={() => moveCursor(i)}
+              onMouseDown={() => moveCursorImmediate(i)}
             >
               <span className="line-number">{i + 1}</span>
               {line.map((t: any, j: number) => (
@@ -225,7 +274,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
               className="line"
               key={i}
               ref={(el) => setLineRef(i, el)}
-              onMouseDown={() => moveCursor(i)}
+              onMouseDown={() => moveCursorImmediate(i)}
             >
               <span className="line-number">{i + 1}</span>
               {line}
