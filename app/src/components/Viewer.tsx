@@ -200,6 +200,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
               className={`line ${focused && i === cursorLine ? "cursor-line" : ""}`}
               key={i}
               ref={(el) => setLineRef(i, el)}
+              onMouseDown={() => setCursorLine(i)}
             >
               <span className="line-number">{getLineNumber(i)}</span>
               {line.map((t: any, j: number) => (
@@ -213,6 +214,7 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
               className={`line ${focused && i === cursorLine ? "cursor-line" : ""}`}
               key={i}
               ref={(el) => setLineRef(i, el)}
+              onMouseDown={() => setCursorLine(i)}
             >
               <span className="line-number">{getLineNumber(i)}</span>
               {line}
