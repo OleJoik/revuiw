@@ -922,7 +922,7 @@ html, body, #root {
   position: fixed;
   width: 400px;
   max-height: 60vh;
-  z-index: 500;
+  z-index: 10000;
   background: var(--bg-alt);
   border: 1px solid var(--accent);
   border-radius: 6px;
@@ -960,7 +960,7 @@ html, body, #root {
   flex-shrink: 0;
 }
 
-.sel-chat-promote {
+.sel-chat-btn {
   padding: 2px 7px;
   background: var(--bg-hover);
   border: 1px solid var(--border);
@@ -971,12 +971,12 @@ html, body, #root {
   cursor: pointer;
 }
 
-.sel-chat-promote:hover:not(:disabled) {
+.sel-chat-btn:hover:not(:disabled) {
   background: var(--bg-active);
   color: var(--accent);
 }
 
-.sel-chat-promote:disabled {
+.sel-chat-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -1025,6 +1025,67 @@ html, body, #root {
 }
 
 .sel-chat-messages::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* ---- Gutter anchor markers (persistent selection threads) ---- */
+
+.viewer-anchor {
+  position: absolute;
+  left: 0;
+  width: 5px;
+  min-height: 12px;
+  padding: 0;
+  border: none;
+  border-radius: 0 2px 2px 0;
+  background: var(--green);
+  opacity: 0.5;
+  cursor: pointer;
+  z-index: 3;
+  transition: opacity 0.1s, width 0.1s;
+}
+
+.viewer-anchor:hover {
+  opacity: 1;
+  width: 7px;
+}
+
+.viewer-anchor.open {
+  background: var(--accent);
+  opacity: 1;
+}
+
+/* ---- Markdown tables (constrain wide tables to the chat width) ---- */
+
+.oc-markdown table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+
+.oc-markdown th,
+.oc-markdown td {
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.oc-markdown th {
+  background: var(--bg-active);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.oc-markdown table::-webkit-scrollbar {
+  height: 5px;
+}
+
+.oc-markdown table::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
 }

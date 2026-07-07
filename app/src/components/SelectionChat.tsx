@@ -2,26 +2,28 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
-  forkSession, createSession, sendPrompt, selectionLabel,
-  type Message, type Agent, type SelectionContext,
+  forkSession, createSession, getMessages, sendPrompt, selectionLabel, threadContext,
+  type Message, type Agent, type SelectionThread,
 } from "../opencode";
 
 interface Props {
-  context: SelectionContext;
-  parentSessionId: string | null;
+  thread: SelectionThread;
   onClose: () => void;
+  onRemove: () => void;
+  onSessionCreated: (sessionId: string) => void;
   onPromote: (sessionId: string) => void;
 }
 
-// Offset each new popover so stacked ones don't perfectly overlap.
+// Offset each freshly-opened popover so stacked ones don't perfectly overlap.
 let spawnCount = 0;
 
-export function SelectionChat({ context, parentSessionId, onClose, onPromote }: Props) {
+export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onPromote }: Props) {
   const [agent, setAgent] = useSetting<Agent>("oc:agent", "plan");
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [hasSession, setHasSession] = useState(!!thread.sessionId);
+  const sessionRef = useRef<string | null>(thread.sessionId);
   const [pos, setPos] = useState(() => {
     const n = spawnCount++;
     return { x: Math.max(60, window.innerWidth - 460 - (n % 4) * 28), y: 90 + (n % 4) * 28 };
@@ -29,6 +31,15 @@ export function SelectionChat({ context, parentSessionId, onClose, onPromote }: 
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
+
+  // Reload conversation history when (re)opening a thread that already has a session.
+  useEffect(() => {
+    sessionRef.current = thread.sessionId;
+    setHasSession(!!thread.sessionId);
+    if (thread.sessionId) {
+      getMessages(thread.sessionId).then(setMessages).catch(() => {});
+    }
+  }, [thread.sessionId]);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -50,29 +61,32 @@ export function SelectionChat({ context, parentSessionId, onClose, onPromote }: 
     document.body.style.userSelect = "none";
   };
 
-  // Lazily fork (or create) the backing session on first use.
+  // Lazily fork (or create) the backing session on first message.
   const ensureSession = useCallback(async (): Promise<string | null> => {
-    if (sessionId) return sessionId;
-    const s = parentSessionId
-      ? await forkSession(parentSessionId)
-      : await createSession(`selection: ${selectionLabel(context)}`);
+    if (sessionRef.current) return sessionRef.current;
+    const s = thread.parentSessionId
+      ? await forkSession(thread.parentSessionId)
+      : await createSession(`selection: ${selectionLabel(thread)}`);
     if (!s) return null;
-    setSessionId(s.id);
+    sessionRef.current = s.id;
+    setHasSession(true);
+    onSessionCreated(s.id);
     return s.id;
-  }, [sessionId, parentSessionId, context]);
+  }, [thread, onSessionCreated]);
 
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
 
+    // Attach the selection only on the very first turn of this thread.
+    const first = messages.length === 0 && !sessionRef.current;
     const sid = await ensureSession();
     if (!sid) {
       setMessages(prev => [...prev, { info: { role: "error" }, parts: [{ type: "text", text: "Could not start session" }] }]);
       return;
     }
 
-    // Attach the selection only on the first turn of this thread.
-    const ctx = messages.length === 0 ? context : null;
+    const ctx = first ? threadContext(thread) : null;
     setInput("");
     setLoading(true);
     setMessages(prev => [...prev, { info: { role: "user" }, parts: [{ type: "text", text }] }]);
@@ -87,23 +101,24 @@ export function SelectionChat({ context, parentSessionId, onClose, onPromote }: 
     inputRef.current?.focus();
   };
 
-  const preview = context.text.split("\n").slice(0, 6).join("\n");
-  const truncated = context.text.split("\n").length > 6;
+  const preview = thread.text.split("\n").slice(0, 6).join("\n");
+  const truncated = thread.text.split("\n").length > 6;
 
   return (
     <div className="sel-chat" style={{ left: pos.x, top: pos.y }}>
       <div className="sel-chat-header" onMouseDown={startDrag}>
-        <span className="sel-chat-title" title={context.path}>{selectionLabel(context)}</span>
+        <span className="sel-chat-title" title={thread.path}>{selectionLabel(thread)}</span>
         <div className="sel-chat-header-actions">
           <button
-            className="sel-chat-promote"
-            disabled={!sessionId}
-            title={sessionId ? "Open this thread in the main panel" : "Send a message first"}
-            onClick={() => sessionId && onPromote(sessionId)}
+            className="sel-chat-btn"
+            disabled={!hasSession}
+            title={hasSession ? "Open this thread in the main panel" : "Send a message first"}
+            onClick={() => sessionRef.current && onPromote(sessionRef.current)}
           >
             Promote
           </button>
-          <button className="sel-chat-close" onClick={onClose}>&times;</button>
+          <button className="sel-chat-btn" title="Delete this anchor" onClick={onRemove}>Del</button>
+          <button className="sel-chat-close" title="Close (keeps anchor in gutter)" onClick={onClose}>&times;</button>
         </div>
       </div>
 
@@ -112,7 +127,7 @@ export function SelectionChat({ context, parentSessionId, onClose, onPromote }: 
       <div className="sel-chat-messages" onClick={handleCopyClick}>
         {messages.length === 0 && (
           <div className="oc-empty">
-            {parentSessionId ? "Forked from current session — ask about this selection" : "Ask about this selection"}
+            {thread.parentSessionId ? "Forked from current session — ask about this selection" : "Ask about this selection"}
           </div>
         )}
         {messages.map((msg, i) => {

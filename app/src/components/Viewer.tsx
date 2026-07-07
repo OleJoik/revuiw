@@ -3,6 +3,13 @@ import { layout, prepare } from "@chenglou/pretext";
 import { useSetting } from "../hooks";
 import type { SelectionContext } from "../opencode";
 
+interface Anchor {
+  id: string;
+  startLine: number;
+  endLine: number;
+  open: boolean;
+}
+
 interface Props {
   filePath: string | null;
   onClose: () => void;
@@ -10,6 +17,8 @@ interface Props {
   onFocus: () => void;
   onSendToChat: (ctx: SelectionContext) => void;
   onOpenSelectionChat: (ctx: SelectionContext) => void;
+  anchors?: Anchor[];
+  onAnchorClick?: (id: string) => void;
 }
 
 type Token = { content: string; color?: string };
@@ -137,7 +146,7 @@ function nextScrollOff(value: number) {
   return next ?? SCROLL_OFF_OPTIONS[0];
 }
 
-export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOpenSelectionChat }: Props) {
+export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOpenSelectionChat, anchors = [], onAnchorClick }: Props) {
   const [content, setContent] = useState("");
   const [tokens, setTokens] = useState<Token[][] | null>(null);
   const [lang, setLang] = useState<string | null>(null);
@@ -490,6 +499,20 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
                 }}
               />
             )}
+            {anchors.map(a => {
+              const startMetric = metrics[a.startLine - 1];
+              const endMetric = metrics[a.endLine - 1] ?? startMetric;
+              if (!startMetric) return null;
+              return (
+                <button
+                  key={a.id}
+                  className={`viewer-anchor ${a.open ? "open" : ""}`}
+                  style={{ top: startMetric.top, height: endMetric.top + endMetric.height - startMetric.top }}
+                  title={`Chat about lines ${a.startLine}\u2013${a.endLine}`}
+                  onMouseDown={e => { e.stopPropagation(); e.preventDefault(); onAnchorClick?.(a.id); }}
+                />
+              );
+            })}
             <pre className={`viewer-code ${tokens ? "shiki" : ""}`}>
               <code>
                 {Array.from({ length: range.end - range.start }, (_, offset) => {

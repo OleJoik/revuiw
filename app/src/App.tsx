@@ -4,7 +4,7 @@ import { Viewer } from "./components/Viewer";
 import { OpenCodePanel } from "./components/OpenCodePanel";
 import { SelectionChat } from "./components/SelectionChat";
 import { useSetting } from "./hooks";
-import type { SelectionContext } from "./opencode";
+import type { SelectionContext, SelectionThread } from "./opencode";
 
 export interface RootEntry {
   path: string;
@@ -22,15 +22,7 @@ export interface TreeNode {
 
 export type Panel = "sidebar" | "viewer" | "chat";
 
-// An open ephemeral selection chat (flow B). Each forks from the current main
-// session so it inherits context while keeping its own tangent history.
-interface Popover {
-  id: string;
-  context: SelectionContext;
-  parentSessionId: string | null;
-}
-
-let popoverSeq = 0;
+let threadSeq = 0;
 
 export function App() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -40,11 +32,14 @@ export function App() {
 
   // Selection -> chat wiring.
   // `pendingSelection` is the chip queued for the main panel (flow A).
-  // `popovers` are floating forked chats bound to a selection (flow B).
-  // `mainSessionId` is reported by the panel so popovers know what to fork.
+  // `threads` are persistent selection-anchored chats (flow B); their anchors
+  // live in the Viewer gutter. `openIds` tracks which are currently popped open
+  // (kept out of storage so nothing auto-reopens on reload).
+  // `mainSessionId` is reported by the panel so new threads know what to fork.
   // `activateSession` asks the panel to switch to a session (promote flow).
   const [pendingSelection, setPendingSelection] = useState<SelectionContext | null>(null);
-  const [popovers, setPopovers] = useState<Popover[]>([]);
+  const [threads, setThreads] = useSetting<SelectionThread[]>("threads", []);
+  const [openIds, setOpenIds] = useState<string[]>([]);
   const [mainSessionId, setMainSessionId] = useState<string | null>(null);
   const [activateSession, setActivateSession] = useState<{ id: string; token: number } | null>(null);
 
@@ -59,18 +54,39 @@ export function App() {
   }, [openChat]);
 
   const openSelectionChat = useCallback((ctx: SelectionContext) => {
-    setPopovers(prev => [...prev, { id: `sel-${++popoverSeq}`, context: ctx, parentSessionId: mainSessionId }]);
-  }, [mainSessionId]);
+    const id = `sel-${Date.now().toString(36)}-${++threadSeq}`;
+    setThreads(prev => [...prev, { id, ...ctx, parentSessionId: mainSessionId, sessionId: null }]);
+    setOpenIds(prev => [...prev, id]);
+  }, [mainSessionId, setThreads]);
 
-  const closePopover = useCallback((id: string) => {
-    setPopovers(prev => prev.filter(p => p.id !== id));
+  // Close popover but keep the anchor — unless it was never used (no session),
+  // in which case discard it so stray `C` presses don't litter the gutter.
+  const closeThread = useCallback((id: string) => {
+    setOpenIds(prev => prev.filter(x => x !== id));
+    setThreads(prev => {
+      const t = prev.find(x => x.id === id);
+      return t && !t.sessionId ? prev.filter(x => x.id !== id) : prev;
+    });
+  }, [setThreads]);
+
+  const toggleThread = useCallback((id: string) => {
+    setOpenIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }, []);
 
-  const promoteSession = useCallback((id: string, popoverId: string) => {
-    setActivateSession({ id, token: Date.now() });
-    closePopover(popoverId);
+  const removeThread = useCallback((id: string) => {
+    setOpenIds(prev => prev.filter(x => x !== id));
+    setThreads(prev => prev.filter(t => t.id !== id));
+  }, [setThreads]);
+
+  const setThreadSession = useCallback((id: string, sessionId: string) => {
+    setThreads(prev => prev.map(t => t.id === id ? { ...t, sessionId } : t));
+  }, [setThreads]);
+
+  const promoteSession = useCallback((sessionId: string, threadId: string) => {
+    setActivateSession({ id: sessionId, token: Date.now() });
+    setOpenIds(prev => prev.filter(x => x !== threadId));
     openChat();
-  }, [closePopover, openChat]);
+  }, [openChat]);
 
   // Get ordered list of visible panels
   const getVisiblePanels = useCallback((): Panel[] => {
@@ -137,6 +153,10 @@ export function App() {
     if (focusedPanel === "chat" && !ocOpen) setFocusedPanel("viewer");
   }, [sidebarOpen, ocOpen]);
 
+  const anchors = threads
+    .filter(t => t.path === selectedFile)
+    .map(t => ({ id: t.id, startLine: t.startLine, endLine: t.endLine, open: openIds.includes(t.id) }));
+
   return (
     <div className="app-layout">
       <Sidebar
@@ -153,6 +173,8 @@ export function App() {
         onFocus={() => setFocusedPanel("viewer")}
         onSendToChat={sendSelectionToChat}
         onOpenSelectionChat={openSelectionChat}
+        anchors={anchors}
+        onAnchorClick={toggleThread}
       />
       <OpenCodePanel
         open={ocOpen}
@@ -164,13 +186,14 @@ export function App() {
         onSessionChange={setMainSessionId}
         activateSession={activateSession}
       />
-      {popovers.map(p => (
+      {threads.filter(t => openIds.includes(t.id)).map(t => (
         <SelectionChat
-          key={p.id}
-          context={p.context}
-          parentSessionId={p.parentSessionId}
-          onClose={() => closePopover(p.id)}
-          onPromote={(sessionId) => promoteSession(sessionId, p.id)}
+          key={t.id}
+          thread={t}
+          onClose={() => closeThread(t.id)}
+          onRemove={() => removeThread(t.id)}
+          onSessionCreated={(sessionId) => setThreadSession(t.id, sessionId)}
+          onPromote={(sessionId) => promoteSession(sessionId, t.id)}
         />
       ))}
     </div>

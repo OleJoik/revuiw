@@ -2,7 +2,9 @@ import { useState, useCallback } from "react";
 
 const LS_PREFIX = "revuiw:";
 
-export function useSetting<T>(key: string, fallback: T): [T, (v: T) => void] {
+type Updater<T> = T | ((prev: T) => T);
+
+export function useSetting<T>(key: string, fallback: T): [T, (v: Updater<T>) => void] {
   const [value, setValue] = useState<T>(() => {
     try {
       const v = localStorage.getItem(LS_PREFIX + key);
@@ -12,11 +14,14 @@ export function useSetting<T>(key: string, fallback: T): [T, (v: T) => void] {
     }
   });
 
-  const set = useCallback((v: T) => {
-    setValue(v);
-    try {
-      localStorage.setItem(LS_PREFIX + key, JSON.stringify(v));
-    } catch {}
+  const set = useCallback((v: Updater<T>) => {
+    setValue(prev => {
+      const next = typeof v === "function" ? (v as (p: T) => T)(prev) : v;
+      try {
+        localStorage.setItem(LS_PREFIX + key, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   }, [key]);
 
   return [value, set];
