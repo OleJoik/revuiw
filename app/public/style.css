@@ -420,6 +420,7 @@ html, body, #root {
 }
 
 .viewer-body .cursor-line .line-number {
+  text-align: left;
   color: var(--accent);
   opacity: 1;
 }
