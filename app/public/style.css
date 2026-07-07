@@ -401,6 +401,7 @@ html, body, #root {
 .viewer-body .line {
   display: block;
   border-left: 2px solid transparent;
+  padding-left: 1ch;
 }
 
 .viewer-body .line.cursor-line {
