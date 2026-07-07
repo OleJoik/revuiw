@@ -70,6 +70,11 @@ function totalHeight(metrics: RowMetric[]) {
 }
 
 function findLineAtOffset(metrics: RowMetric[], y: number) {
+  if (metrics.length === 0) return 0;
+  const last = metrics[metrics.length - 1];
+  if (y <= metrics[0].top) return 0;
+  if (y >= last.top + last.height) return metrics.length - 1;
+
   let lo = 0;
   let hi = metrics.length - 1;
   let answer = 0;
@@ -91,10 +96,10 @@ function visibleRange(metrics: RowMetric[], scrollTop: number, viewportHeight: n
   if (metrics.length === 0) return { start: 0, end: 0 };
 
   const start = findLineAtOffset(metrics, Math.max(0, scrollTop - OVERSCAN_PX));
-  const end = Math.min(
+  const end = Math.max(start + 1, Math.min(
     metrics.length,
     findLineAtOffset(metrics, scrollTop + viewportHeight + OVERSCAN_PX) + 1,
-  );
+  ));
 
   return { start, end };
 }
@@ -147,12 +152,17 @@ export function Viewer({ filePath, onClose, focused, onFocus }: Props) {
     const metric = metrics[line];
     if (!body || !metric) return;
 
+    const maxScrollTop = Math.max(0, totalHeight(metrics) - body.clientHeight);
+    const setScrollTop = (value: number) => {
+      body.scrollTop = Math.max(0, Math.min(maxScrollTop, value));
+    };
+
     const top = metric.top;
     const bottom = metric.top + metric.height;
     if (top < body.scrollTop) {
-      body.scrollTop = top;
+      setScrollTop(top);
     } else if (bottom > body.scrollTop + body.clientHeight) {
-      body.scrollTop = bottom - body.clientHeight;
+      setScrollTop(bottom - body.clientHeight);
     }
   }, [metrics]);
 
