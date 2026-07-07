@@ -1077,20 +1077,32 @@ html, body, #root {
   border: none;
   border-radius: 0 2px 2px 0;
   background: var(--green);
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: pointer;
   z-index: 3;
-  transition: opacity 0.1s, width 0.1s;
+  transition: opacity 0.1s, width 0.1s, box-shadow 0.1s;
 }
 
 .viewer-anchor:hover {
   opacity: 1;
   width: 7px;
+  z-index: 5;
 }
 
 .viewer-anchor.open {
   background: var(--accent);
+  opacity: 0.75;
+}
+
+/* Active = the thread the cursor is on / the Tab-cycle target. */
+.viewer-anchor.active {
   opacity: 1;
+  z-index: 4;
+  box-shadow: 0 0 0 1px rgba(166, 227, 161, 0.55), 0 0 6px rgba(166, 227, 161, 0.45);
+}
+
+.viewer-anchor.open.active {
+  box-shadow: 0 0 0 1px rgba(137, 180, 250, 0.6), 0 0 6px rgba(137, 180, 250, 0.5);
 }
 
 /* ---- Markdown tables (constrain wide tables to the chat width) ---- */

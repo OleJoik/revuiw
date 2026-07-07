@@ -36,6 +36,8 @@ const POPOVER_WIDTH = 400;
 const POPOVER_ESTIMATED_HEIGHT = 420;
 const POPOVER_GAP = 8;
 const SCROLL_OFF_OPTIONS = [0, 3, 5, 8, 12];
+const ANCHOR_LANE_STEP = 7; // px between overlapping gutter markers
+const MAX_ANCHOR_LANES = 3; // cap so lanes never march into the line numbers
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -306,6 +308,29 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
 
   const activeAnchorIndex = cursorAnchors.length === 0 ? -1 : anchorStackIndex % cursorAnchors.length;
   const activeCursorAnchor = activeAnchorIndex >= 0 ? cursorAnchors[activeAnchorIndex] : null;
+
+  // Assign each anchor a horizontal "lane" so overlapping threads render as
+  // distinct side-by-side gutter bars instead of stacking on top of each other.
+  // Largest ranges get the leftmost lane (outer-left), nested ones shift right.
+  const anchorLanes = useMemo(() => {
+    const lanes = new Map<string, number>();
+    const laneRanges: Array<Array<{ start: number; end: number }>> = [];
+    const sorted = [...anchors].sort((a, b) => {
+      const aSize = a.endLine - a.startLine;
+      const bSize = b.endLine - b.startLine;
+      return bSize - aSize || a.startLine - b.startLine || a.id.localeCompare(b.id);
+    });
+    for (const a of sorted) {
+      let lane = 0;
+      while ((laneRanges[lane] ?? []).some(r => a.startLine <= r.end && r.start <= a.endLine)) {
+        lane++;
+      }
+      if (!laneRanges[lane]) laneRanges[lane] = [];
+      laneRanges[lane].push({ start: a.startLine, end: a.endLine });
+      lanes.set(a.id, lane);
+    }
+    return lanes;
+  }, [anchors]);
 
   useEffect(() => {
     setAnchorStackIndex(0);
@@ -582,6 +607,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
               if (!startMetric) return null;
               const height = endMetric.top + endMetric.height - startMetric.top;
               const isActive = activeCursorAnchor?.id === a.id;
+              const lane = Math.min(anchorLanes.get(a.id) ?? 0, MAX_ANCHOR_LANES - 1);
               return (
                 <React.Fragment key={a.id}>
                   {(a.open || isActive) && (
@@ -591,8 +617,8 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
                     />
                   )}
                   <button
-                    className={`viewer-anchor ${a.open ? "open" : ""}`}
-                    style={{ top: startMetric.top, height }}
+                    className={`viewer-anchor ${a.open ? "open" : ""} ${isActive ? "active" : ""}`}
+                    style={{ top: startMetric.top, height, left: lane * ANCHOR_LANE_STEP }}
                     title={`Chat about lines ${a.startLine}\u2013${a.endLine}`}
                     onMouseDown={e => {
                       e.stopPropagation();
