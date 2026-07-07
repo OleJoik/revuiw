@@ -538,10 +538,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
               const height = endMetric.top + endMetric.height - startMetric.top;
               return (
                 <React.Fragment key={a.id}>
-                  <div
-                    className={`viewer-thread-highlight ${a.open ? "open" : ""}`}
-                    style={{ top: startMetric.top, height }}
-                  />
+                  {a.open && <div className="viewer-thread-highlight" style={{ top: startMetric.top, height }} />}
                   <button
                     className={`viewer-anchor ${a.open ? "open" : ""}`}
                     style={{ top: startMetric.top, height }}

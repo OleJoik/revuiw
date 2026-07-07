@@ -1021,15 +1021,10 @@ html, body, #root {
   left: 9ch;
   right: 0;
   pointer-events: none;
-  background: rgba(166, 227, 161, 0.06);
-  border-left: 1px solid rgba(166, 227, 161, 0.35);
-  z-index: 0;
-}
-
-.viewer-thread-highlight.open {
   background: rgba(137, 180, 250, 0.11);
   border: 1px solid rgba(137, 180, 250, 0.5);
   border-left-width: 2px;
+  z-index: 0;
 }
 
 .viewer-anchor {
