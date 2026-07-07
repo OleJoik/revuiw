@@ -3,6 +3,7 @@ import { join, relative, resolve, dirname, basename, extname } from "path";
 import { homedir } from "os";
 import { createHighlighter, type Highlighter } from "shiki";
 import { createOpencodeClient } from "@opencode-ai/sdk";
+import homepage from "./public/index.html";
 
 // --- Shiki syntax highlighting setup ---
 
@@ -166,9 +167,8 @@ async function scanGitRepos(parentPath: string): Promise<string[]> {
 Bun.serve({
   port: 3000,
   development: process.env.NODE_ENV === "development",
-  static: {
-    "/": Bun.file(join(import.meta.dir, "public/index.html")),
-    "/style.css": Bun.file(join(import.meta.dir, "public/style.css")),
+  routes: {
+    "/": homepage,
   },
   async fetch(req) {
     try {
