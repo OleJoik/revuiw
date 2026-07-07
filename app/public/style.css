@@ -995,21 +995,6 @@ html, body, #root {
   color: var(--fg);
 }
 
-.sel-chat-context {
-  margin: 0;
-  padding: 6px 8px;
-  max-height: 90px;
-  overflow: auto;
-  background: #11111b;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font);
-  font-size: 10px;
-  line-height: 1.4;
-  color: var(--fg-file);
-  white-space: pre;
-  flex-shrink: 0;
-}
-
 .sel-chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -1030,6 +1015,22 @@ html, body, #root {
 }
 
 /* ---- Gutter anchor markers (persistent selection threads) ---- */
+
+.viewer-thread-highlight {
+  position: absolute;
+  left: 9ch;
+  right: 0;
+  pointer-events: none;
+  background: rgba(166, 227, 161, 0.06);
+  border-left: 1px solid rgba(166, 227, 161, 0.35);
+  z-index: 0;
+}
+
+.viewer-thread-highlight.open {
+  background: rgba(137, 180, 250, 0.11);
+  border: 1px solid rgba(137, 180, 250, 0.5);
+  border-left-width: 2px;
+}
 
 .viewer-anchor {
   position: absolute;

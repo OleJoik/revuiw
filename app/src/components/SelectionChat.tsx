@@ -115,9 +115,6 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
     inputRef.current?.focus();
   };
 
-  const preview = thread.text.split("\n").slice(0, 6).join("\n");
-  const truncated = thread.text.split("\n").length > 6;
-
   return (
     <div className="sel-chat" style={{ left: pos.x, top: pos.y }}>
       <div className="sel-chat-header" onMouseDown={startDrag}>
@@ -135,8 +132,6 @@ export function SelectionChat({ thread, onClose, onRemove, onSessionCreated, onP
           <button className="sel-chat-close" title="Close (keeps anchor in gutter)" onClick={onClose}>&times;</button>
         </div>
       </div>
-
-      <pre className="sel-chat-context">{preview}{truncated ? "\n…" : ""}</pre>
 
       <div className="sel-chat-messages" onClick={handleCopyClick}>
         {messages.length === 0 && (

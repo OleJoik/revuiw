@@ -535,18 +535,24 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
               const startMetric = metrics[a.startLine - 1];
               const endMetric = metrics[a.endLine - 1] ?? startMetric;
               if (!startMetric) return null;
+              const height = endMetric.top + endMetric.height - startMetric.top;
               return (
-                <button
-                  key={a.id}
-                  className={`viewer-anchor ${a.open ? "open" : ""}`}
-                  style={{ top: startMetric.top, height: endMetric.top + endMetric.height - startMetric.top }}
-                  title={`Chat about lines ${a.startLine}\u2013${a.endLine}`}
-                  onMouseDown={e => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    onAnchorClick?.(a.id, placementForRange(a.startLine - 1, a.endLine - 1));
-                  }}
-                />
+                <React.Fragment key={a.id}>
+                  <div
+                    className={`viewer-thread-highlight ${a.open ? "open" : ""}`}
+                    style={{ top: startMetric.top, height }}
+                  />
+                  <button
+                    className={`viewer-anchor ${a.open ? "open" : ""}`}
+                    style={{ top: startMetric.top, height }}
+                    title={`Chat about lines ${a.startLine}\u2013${a.endLine}`}
+                    onMouseDown={e => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onAnchorClick?.(a.id, placementForRange(a.startLine - 1, a.endLine - 1));
+                    }}
+                  />
+                </React.Fragment>
               );
             })}
             <pre className={`viewer-code ${tokens ? "shiki" : ""}`}>
