@@ -99,6 +99,16 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
     if (!focused || !open) return;
 
     const handleKey = (e: KeyboardEvent) => {
+      // Ignore typing in foreign inputs (main chat, selection popovers). The
+      // sidebar's own search box is handled explicitly below.
+      const target = e.target as HTMLElement | null;
+      if (
+        target && target !== searchRef.current &&
+        (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")
+      ) {
+        return;
+      }
+
       // Ctrl+j: enter tree navigation mode
       if (e.ctrlKey && e.key === "j") {
         e.preventDefault();

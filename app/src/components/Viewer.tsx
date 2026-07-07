@@ -270,6 +270,12 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
     if (!focused || !filePath || loading) return;
 
     const handleKey = (e: KeyboardEvent) => {
+      // Don't hijack keys while the user is typing in an input/textarea/editable
+      // (e.g. the main chat, a selection-chat popover, or the sidebar search).
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) {
+        return;
+      }
       if (e.altKey || e.metaKey) return;
 
       if (e.key === "Escape") {
