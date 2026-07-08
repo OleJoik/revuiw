@@ -155,22 +155,38 @@ export function computeReviewFromContent(head: string | null, reviewedContent: s
 
 export interface FoldOptions { all?: boolean; startLine?: number; endLine?: number; reviewed: boolean }
 
-// Produce the new reviewed-snapshot content for an approve-range operation:
-// fold the change hunks of diff(reviewed, working) whose working-line range
-// intersects [startLine, endLine] from the reviewed side onto the working side.
+// Produce the new reviewed-snapshot content for an approve-range operation.
+// Approval is line-by-line: within a change block, each working line in
+// [startLine, endLine] is folded onto the reviewed side individually, while the
+// rest of the block stays unreviewed. A working line that is approved is written
+// into the reviewed snapshot (so it re-derives as `reviewed`); an unapproved one
+// is omitted (stays `unreviewed`). The old reviewed lines (s.a) are preserved
+// once, just before the first unapproved line in the block, so the unapproved
+// region still diffs. If every working line in the block is approved the old
+// lines vanish (whole block approved); a pure deletion (no working lines) keeps
+// its old lines since there is nothing to approve.
 export function foldReviewedRange(reviewedContent: string, workingContent: string, opts: FoldOptions): string {
   const W = splitContentLines(workingContent);
   const R = splitContentLines(reviewedContent);
   const start = opts.startLine ?? 1;
   const end = opts.endLine ?? W.length;
+  const approved = (lineNo: number) => opts.reviewed && lineNo >= start && lineNo <= end;
+
   const segs = diffSegments(R, W);
   const out: string[] = [];
-  let bi = 0;
+  let bi = 0; // 0-based working line index
   for (const s of segs) {
     if (s.type === "equal") { out.push(...s.b); bi += s.b.length; continue; }
-    const segStart = bi + 1, segEnd = bi + s.b.length;
-    const intersects = opts.reviewed && s.b.length > 0 && segStart <= end && start <= segEnd;
-    out.push(...(intersects ? s.b : s.a));
+    let keptOld = false;
+    for (let k = 0; k < s.b.length; k++) {
+      if (approved(bi + k + 1)) {
+        out.push(s.b[k]);
+      } else if (!keptOld) {
+        out.push(...s.a);
+        keptOld = true;
+      }
+    }
+    if (s.b.length === 0 && !keptOld) out.push(...s.a);
     bi += s.b.length;
   }
   return out.join("\n");

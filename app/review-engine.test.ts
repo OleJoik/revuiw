@@ -153,12 +153,39 @@ describe("foldReviewedRange", () => {
     expect(s.fullyReviewed).toBe(true);
   });
 
-  test("a range touching part of a multi-line hunk approves the whole hunk", () => {
-    // one 2-line change hunk at working lines 2..3; range only names line 2
+  test("line-by-line: approving one line of a multi-line insertion leaves the rest pending", () => {
+    // one 2-line insertion at working lines 2..3; approve only line 2
     const next = foldReviewedRange("a\nd\n", "a\nB\nC\nd\n", { reviewed: true, startLine: 2, endLine: 2 });
-    expect(norm(next)).toEqual(["a", "B", "C", "d"]);
+    expect(norm(next)).toEqual(["a", "B", "d"]);
     const s = computeReviewFromContent("a\nd\n", next, "a\nB\nC\nd\n");
-    expect(s.fullyReviewed).toBe(true);
+    expect(s.lineStatus).toEqual(["unchanged", "reviewed", "unreviewed", "unchanged"]);
+    expect(s.fullyReviewed).toBe(false);
+  });
+
+  test("line-by-line: approving one line of a multi-line replacement leaves the rest pending", () => {
+    // reviewed p/q replaced by working P/Q/R (lines 1..3); approve only line 2
+    const next = foldReviewedRange("p\nq\n", "P\nQ\nR\n", { reviewed: true, startLine: 2, endLine: 2 });
+    const s = computeReviewFromContent("p\nq\n", next, "P\nQ\nR\n");
+    expect(s.lineStatus).toEqual(["unreviewed", "reviewed", "unreviewed"]);
+    expect(s.reviewedLineCount).toBe(1);
+    expect(s.unreviewedLineCount).toBe(2);
+  });
+
+  test("line-by-line: approving the remaining lines later converges to working", () => {
+    const head = "a\nd\n";
+    const working = "a\nB\nC\nd\n";
+    // step 1: approve only line 2
+    let reviewed = foldReviewedRange(head, working, { reviewed: true, startLine: 2, endLine: 2 });
+    // step 2: approve the still-pending line 3
+    reviewed = foldReviewedRange(reviewed, working, { reviewed: true, startLine: 3, endLine: 3 });
+    expect(norm(reviewed)).toEqual(norm(working));
+    expect(computeReviewFromContent(head, reviewed, working).fullyReviewed).toBe(true);
+  });
+
+  test("a pure deletion is never approved by a range fold (nothing to select)", () => {
+    // reviewed a/x/b, working a/b (line x deleted): approving line 1..2 keeps x in reviewed
+    const next = foldReviewedRange("a\nx\nb\n", "a\nb\n", { reviewed: true, startLine: 1, endLine: 2 });
+    expect(norm(next)).toEqual(["a", "x", "b"]);
   });
 
   test("reviewed:false is a no-op fold (keeps reviewed side)", () => {
