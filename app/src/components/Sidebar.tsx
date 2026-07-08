@@ -86,11 +86,14 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
     saveExpanded(next);
   };
 
-  // Focus search input when panel receives focus, exit tree mode
+  // Restore focus within sidebar when panel receives focus
   useEffect(() => {
     if (focused && open) {
-      setTreeActive(false);
-      searchRef.current?.focus();
+      if (treeActive) {
+        searchRef.current?.blur();
+      } else {
+        searchRef.current?.focus();
+      }
     }
   }, [focused]);
 
@@ -200,6 +203,15 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [focused, open, cursor, visibleNodes, expanded, treeActive]);
+
+  // Keep cursor on a valid visible node when search changes
+  useEffect(() => {
+    if (visibleNodes.length === 0) {
+      setCursor(null);
+    } else if (!cursor || !visibleNodes.some(n => n.path === cursor)) {
+      setCursor(visibleNodes[0].path);
+    }
+  }, [visibleNodes]);
 
   // Scroll cursor into view
   useEffect(() => {
