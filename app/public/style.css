@@ -152,6 +152,137 @@ html, body, #root {
   border-color: var(--accent);
 }
 
+.sidebar-root-label {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sidebar-root-branch {
+  margin-left: 6px;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.sidebar-root-switch,
+.sidebar-root-add {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.sidebar-root-switch:hover,
+.sidebar-root-add:hover {
+  color: var(--fg);
+}
+
+.sidebar-root-picker {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  padding: 4px;
+}
+
+.sidebar-root-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.sidebar-root-item:hover {
+  background: var(--bg-hover);
+}
+
+.sidebar-root-item.active {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.sidebar-root-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-root-item-remove {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  opacity: 0;
+}
+
+.sidebar-root-item:hover .sidebar-root-item-remove {
+  opacity: 1;
+}
+
+.sidebar-root-item-remove:hover {
+  color: var(--fg);
+}
+
+.sidebar-root-add-row {
+  display: flex;
+  gap: 4px;
+  padding: 4px 4px 2px;
+}
+
+.sidebar-root-add-row input {
+  flex: 1;
+  padding: 3px 6px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 11px;
+  outline: none;
+}
+
+.sidebar-root-add-row input:focus {
+  border-color: var(--accent);
+}
+
+.sidebar-root-add-row input::placeholder {
+  color: var(--fg-muted);
+}
+
+.sidebar-root-add-row button {
+  padding: 3px 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.sidebar-root-add-row button:hover:not(:disabled) {
+  background: var(--bg-active);
+}
+
+.sidebar-root-add-row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .sidebar-close {
   background: none;
   border: none;

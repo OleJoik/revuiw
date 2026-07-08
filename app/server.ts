@@ -202,7 +202,19 @@ Bun.serve({
       const pathname = url.pathname;
 
       if (pathname === "/api/roots" && req.method === "GET") {
-        const roots = await loadRoots();
+        let roots = await loadRoots();
+        if (roots.length === 0) {
+          const cwd = process.cwd();
+          const isGit = await isGitRepo(cwd);
+          const entry: RootEntry = {
+            path: cwd,
+            label: basename(cwd),
+            type: isGit ? "git" : "dir",
+            branch: isGit ? await getGitBranch(cwd) : undefined,
+          };
+          roots.push(entry);
+          await saveRoots(roots);
+        }
         for (const r of roots) await refreshRoot(r);
         return new Response(JSON.stringify(roots), {
           headers: { "Content-Type": "application/json" },

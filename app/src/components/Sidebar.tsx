@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useSetting } from "../hooks";
 import type { RootEntry, TreeNode } from "../types";
 
@@ -36,9 +36,12 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
   const [showHidden, setShowHidden] = useSetting("showHidden", false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [treeActive, setTreeActive] = useState(false);
+  const [showRootPicker, setShowRootPicker] = useState(false);
+  const [addingRoot, setAddingRoot] = useState("");
   const dragging = useRef(false);
   const treeRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const rootPickerRef = useRef<HTMLDivElement>(null);
 
   // Flatten visible nodes for keyboard cursor movement
   const visibleNodes = useMemo(() => {
@@ -220,6 +223,54 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
     el?.scrollIntoView({ block: "nearest" });
   }, [cursor]);
 
+  // Close root picker on outside click
+  useEffect(() => {
+    if (!showRootPicker) return;
+    const handleClick = (e: MouseEvent) => {
+      if (rootPickerRef.current && !rootPickerRef.current.contains(e.target as Node)) {
+        setShowRootPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showRootPicker]);
+
+  const addRoot = (path: string) => {
+    if (!path.trim()) return;
+    fetch("/api/roots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: path.trim() }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        setRoots(data);
+        const added = data[data.length - 1];
+        if (added) setCurrentRoot(added.path);
+        setAddingRoot("");
+        setShowRootPicker(false);
+      })
+      .catch(() => {});
+  };
+
+  const removeRoot = (path: string) => {
+    fetch("/api/roots", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        setRoots(data);
+        if (currentRoot === path) {
+          setCurrentRoot(data.length > 0 ? data[0].path : null);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const activeRoot = roots.find(r => r.path === currentRoot);
+
   // Resize
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -256,20 +307,54 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
   return (
     <div className={`sidebar ${focused ? "panel-focused" : ""}`} style={{ width }} onMouseDown={onFocus}>
       <div className="sidebar-header">
-        <select
-          className="sidebar-root-select"
-          value={currentRoot || ""}
-          onChange={e => setCurrentRoot(e.target.value || null)}
-        >
-          {roots.length === 0 && <option value="">No roots</option>}
-          {roots.map(r => (
-            <option key={r.path} value={r.path}>
-              {r.label}{r.branch ? ` [${r.branch}]` : ""}
-            </option>
-          ))}
-        </select>
+        <span className="sidebar-root-label" title={currentRoot || undefined}>
+          {activeRoot ? activeRoot.label : "No folder"}
+          {activeRoot?.branch && <span className="sidebar-root-branch">{activeRoot.branch}</span>}
+        </span>
+        {roots.length > 1 && (
+          <button
+            className="sidebar-root-switch"
+            onClick={() => setShowRootPicker(!showRootPicker)}
+            title="Switch folder"
+          >&#8645;</button>
+        )}
+        <button
+          className="sidebar-root-add"
+          onClick={() => setShowRootPicker(!showRootPicker)}
+          title="Add folder"
+        >+</button>
         <button className="sidebar-close" onClick={onToggle} title="Close sidebar">&times;</button>
       </div>
+      {showRootPicker && (
+        <div className="sidebar-root-picker" ref={rootPickerRef}>
+          {roots.map(r => (
+            <div
+              key={r.path}
+              className={`sidebar-root-item ${r.path === currentRoot ? "active" : ""}`}
+              onClick={() => { setCurrentRoot(r.path); setShowRootPicker(false); }}
+            >
+              <span className="sidebar-root-item-label">{r.label}{r.branch ? ` [${r.branch}]` : ""}</span>
+              {roots.length > 1 && (
+                <button
+                  className="sidebar-root-item-remove"
+                  onClick={(e) => { e.stopPropagation(); removeRoot(r.path); }}
+                  title="Remove"
+                >&times;</button>
+              )}
+            </div>
+          ))}
+          <div className="sidebar-root-add-row">
+            <input
+              type="text"
+              placeholder="Add path..."
+              value={addingRoot}
+              onChange={e => setAddingRoot(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") addRoot(addingRoot); }}
+            />
+            <button onClick={() => addRoot(addingRoot)} disabled={!addingRoot.trim()}>Add</button>
+          </div>
+        </div>
+      )}
       <div className="sidebar-search">
         <input
           ref={searchRef}
