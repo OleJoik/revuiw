@@ -54,14 +54,14 @@ html, body, #root {
 /* ---- Tree cursor ---- */
 
 .tree-node.cursor {
-  background: var(--bg-hover);
+  background: rgba(205, 214, 244, 0.04);
 }
 
 .panel-focused .tree-node.cursor {
   background: rgba(136, 176, 255, 0.12);
 }
 
-.tree-navigating .tree-node.cursor {
+.panel-focused .tree-navigating .tree-node.cursor {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
