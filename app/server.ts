@@ -1,9 +1,13 @@
 import { readdir, readFile, writeFile, mkdir, stat, unlink } from "fs/promises";
 import { join, relative, resolve, dirname, basename, extname } from "path";
 import { homedir } from "os";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { createHighlighter, type Highlighter } from "shiki";
 import { createOpencodeClient } from "@opencode-ai/sdk";
+import {
+  computeReviewFromContent, foldReviewedRange,
+  type ReviewState,
+} from "./review-engine";
 import homepage from "./public/index.html";
 
 // --- Shiki syntax highlighting setup ---
@@ -94,6 +98,7 @@ interface SelectionContext {
   endLine: number;
   text: string;
   lang?: string;
+  note?: string;
 }
 
 type PromptPart = { type: "text"; text: string };
@@ -109,6 +114,9 @@ function buildPromptParts(message: string, context?: SelectionContext | null): P
     const header = `Selected from \`${context.path}\` (lines ${context.startLine}\u2013${context.endLine}):`;
     const fenced = "```" + lang + "\n" + context.text + "\n```";
     parts.push({ type: "text", text: `${header}\n${fenced}` });
+  }
+  if (context && context.note && context.note.trim()) {
+    parts.push({ type: "text", text: `Note: ${context.note.trim()}` });
   }
   if (message.trim()) parts.push({ type: "text", text: message });
   return parts;
@@ -177,6 +185,148 @@ async function deleteNoteFile(id: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// --- Review state (shadow index in .revuiw/) ---
+//
+// The review model mirrors git's three trees:
+//   HEAD   = baseline
+//   review = the content the user has approved ("reviewed")
+//   working = the current file on disk
+//
+// A changed line is `reviewed` when it differs from HEAD but matches the
+// reviewed snapshot; it is `unreviewed` when it differs from the reviewed
+// snapshot (i.e. an edit the user has not yet approved). Approval is fully
+// content-pinned: any later edit — by a human or an agent — reappears in
+// diff(review, working) and so becomes unreviewed automatically.
+//
+// The reviewed snapshot is stored as a content-addressed blob under
+// .revuiw/blobs/, referenced by SHA in .revuiw/review.json. This is a shadow
+// index: it never touches the user's real git staging area and works for
+// untracked files too.
+
+interface ReviewEntry { reviewedHash: string }
+type ReviewIndex = Record<string, ReviewEntry>;
+
+function revuiwDir(): string {
+  return join(process.cwd(), ".revuiw");
+}
+
+function blobsDir(): string {
+  return join(revuiwDir(), "blobs");
+}
+
+function reviewIndexFile(): string {
+  return join(revuiwDir(), "review.json");
+}
+
+async function storeBlob(content: string): Promise<string> {
+  const hash = createHash("sha256").update(content).digest("hex");
+  await mkdir(blobsDir(), { recursive: true });
+  const p = join(blobsDir(), hash);
+  try { await stat(p); } catch { await writeFile(p, content); }
+  return hash;
+}
+
+async function readBlob(hash: string): Promise<string | null> {
+  try { return await readFile(join(blobsDir(), hash), "utf-8"); } catch { return null; }
+}
+
+async function loadReviewIndex(): Promise<ReviewIndex> {
+  try { return JSON.parse(await readFile(reviewIndexFile(), "utf-8")); } catch { return {}; }
+}
+
+async function saveReviewIndex(idx: ReviewIndex): Promise<void> {
+  await mkdir(revuiwDir(), { recursive: true });
+  await writeFile(reviewIndexFile(), JSON.stringify(idx, null, 2));
+}
+
+async function runGit(cwd: string, args: string[]): Promise<{ code: number; stdout: string }> {
+  try {
+    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "ignore" });
+    const stdout = await new Response(proc.stdout).text();
+    const code = await proc.exited;
+    return { code, stdout };
+  } catch {
+    return { code: 1, stdout: "" };
+  }
+}
+
+async function findRepoRoot(absFile: string): Promise<string | null> {
+  const { code, stdout } = await runGit(dirname(absFile), ["rev-parse", "--show-toplevel"]);
+  return code === 0 && stdout.trim() ? stdout.trim() : null;
+}
+
+async function gitHeadContent(root: string, relPath: string): Promise<string | null> {
+  const { code, stdout } = await runGit(root, ["show", `HEAD:${relPath}`]);
+  return code === 0 ? stdout : null;
+}
+
+async function reviewContext(absFile: string) {
+  const root = await findRepoRoot(absFile);
+  const relPath = root ? relative(root, absFile) : "";
+  const head = root ? await gitHeadContent(root, relPath) : null;
+  const idx = await loadReviewIndex();
+  const entry = idx[absFile];
+  const headContent = head ?? "";
+  const reviewedContent = entry ? (await readBlob(entry.reviewedHash)) ?? headContent : headContent;
+  return { root, relPath, head, headContent, reviewedContent, idx };
+}
+
+async function computeReview(absFile: string): Promise<ReviewState | null> {
+  let working: string;
+  try { working = await readFile(absFile, "utf-8"); } catch { return null; }
+  const { head, reviewedContent } = await reviewContext(absFile);
+  return computeReviewFromContent(head, reviewedContent, working);
+}
+
+interface MarkOptions { all?: boolean; startLine?: number; endLine?: number; reviewed: boolean }
+
+async function markReview(absFile: string, opts: MarkOptions): Promise<ReviewState | null> {
+  let working: string;
+  try { working = await readFile(absFile, "utf-8"); } catch { return null; }
+
+  const { reviewedContent, idx } = await reviewContext(absFile);
+
+  if (!opts.reviewed && opts.all) {
+    // Reset: drop approval entirely -> reviewed falls back to HEAD.
+    delete idx[absFile];
+  } else if (opts.reviewed && opts.all) {
+    // Approve everything: reviewed snapshot == working tree.
+    idx[absFile] = { reviewedHash: await storeBlob(working) };
+  } else {
+    // Approve a working-line range.
+    const folded = foldReviewedRange(reviewedContent, working, opts);
+    idx[absFile] = { reviewedHash: await storeBlob(folded) };
+  }
+
+  await saveReviewIndex(idx);
+  return computeReview(absFile);
+}
+
+async function reviewSummary(root: string): Promise<{ files: Record<string, { changed: boolean; fullyReviewed: boolean; unreviewedLineCount: number }> }> {
+  const changedFiles = new Set<string>();
+  const tracked = await runGit(root, ["diff", "--name-only", "HEAD"]);
+  if (tracked.code === 0) {
+    for (const f of tracked.stdout.split("\n")) if (f.trim()) changedFiles.add(join(root, f.trim()));
+  }
+  const untracked = await runGit(root, ["ls-files", "--others", "--exclude-standard"]);
+  if (untracked.code === 0) {
+    for (const f of untracked.stdout.split("\n")) if (f.trim()) changedFiles.add(join(root, f.trim()));
+  }
+
+  const files: Record<string, { changed: boolean; fullyReviewed: boolean; unreviewedLineCount: number }> = {};
+  for (const f of changedFiles) {
+    const state = await computeReview(f).catch(() => null);
+    if (state && state.changed) {
+      files[f] = {
+        changed: true,
+        fullyReviewed: state.fullyReviewed,
+        unreviewedLineCount: state.unreviewedLineCount,
+      };
+    }
+  }
+  return { files };
 }
 
 interface TreeNode {
@@ -458,6 +608,42 @@ Bun.serve({
         const ok = await deleteNoteFile(id);
         if (!ok) return new Response(JSON.stringify({ error: "Not found" }), { status: 404, headers: { "Content-Type": "application/json" } });
         return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // --- Review API endpoints ---
+
+      if (pathname === "/api/review" && req.method === "GET") {
+        const filePath = url.searchParams.get("path");
+        if (!filePath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const state = await computeReview(resolve(filePath));
+        const body = state ?? { tracked: false, changed: false, fullyReviewed: true, lineStatus: [], hunks: [], unreviewedLineCount: 0, reviewedLineCount: 0 };
+        return new Response(JSON.stringify(body), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (pathname === "/api/review/mark" && req.method === "POST") {
+        const body = await req.json();
+        if (!body.path) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const state = await markReview(resolve(body.path), {
+          all: body.all === true,
+          startLine: body.startLine,
+          endLine: body.endLine,
+          reviewed: body.reviewed !== false,
+        });
+        return new Response(JSON.stringify(state), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (pathname === "/api/review/summary" && req.method === "GET") {
+        const rootParam = url.searchParams.get("root");
+        if (!rootParam) return new Response(JSON.stringify({ error: "Missing root" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const root = (await findRepoRoot(resolve(rootParam))) ?? resolve(rootParam);
+        const summary = await reviewSummary(root);
+        return new Response(JSON.stringify(summary), {
           headers: { "Content-Type": "application/json" },
         });
       }

@@ -15,6 +15,7 @@
   --fg-file: #a6adc8;
   --accent: #89b4fa;
   --green: #a6e3a1;
+  --yellow: #f9e2af;
   --border: #313244;
   --font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
 }
@@ -732,6 +733,26 @@ html, body, #root {
   min-width: 0;
 }
 
+/* Review overlay: per-line approval state in the far-left gutter. */
+.viewer-body .line.rev-unreviewed {
+  box-shadow: inset 3px 0 0 var(--yellow);
+  background: rgba(249, 226, 175, 0.05);
+}
+
+.viewer-body .line.rev-reviewed {
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.viewer-body .line.rev-unreviewed .line-number {
+  color: var(--yellow);
+  opacity: 0.7;
+}
+
+.viewer-body .line.rev-reviewed .line-number {
+  color: var(--green);
+  opacity: 0.55;
+}
+
 .viewer-body.nowrap .line {
   white-space: pre;
 }
@@ -1415,6 +1436,77 @@ html, body, #root {
   background: rgba(166, 227, 161, 0.12);
   border-color: rgba(166, 227, 161, 0.3);
   color: #a6e3a1;
+}
+
+/* ---- Review header controls ---- */
+
+.viewer-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  padding: 2px 6px;
+  border: 1px solid rgba(249, 226, 175, 0.4);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--yellow);
+}
+
+.viewer-review.done {
+  border-color: rgba(166, 227, 161, 0.4);
+  color: var(--green);
+}
+
+.viewer-review-label {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-review-btn {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.viewer-review-btn:hover {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.viewer-review-btn.reset:hover {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+/* Note marker on a chat context chip */
+.oc-chip-note {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(137, 180, 250, 0.18);
+  color: var(--accent);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Unreviewed-changes marker in the file tree */
+.tree-review-indicator {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--yellow);
+  flex-shrink: 0;
+}
+
+.tree-review-indicator.dir {
+  color: var(--yellow);
+  opacity: 0.4;
 }
 
 /* ---- Gutter anchor markers (persistent selection threads) ---- */

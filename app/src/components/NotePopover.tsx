@@ -8,10 +8,10 @@ interface Props {
   onClose: () => void;
   onRemove: () => void;
   onUpdated: (note: Note) => void;
-  onDiscuss: (note: Note) => void;
+  onPickToChat: (note: Note) => void;
 }
 
-export function NotePopover({ note, placement, onClose, onRemove, onUpdated, onDiscuss }: Props) {
+export function NotePopover({ note, placement, onClose, onRemove, onUpdated, onPickToChat }: Props) {
   const [body, setBody] = useState(note.body);
   const [saving, setSaving] = useState(false);
   const [showSnippet, setShowSnippet] = useState(false);
@@ -93,15 +93,15 @@ export function NotePopover({ note, placement, onClose, onRemove, onUpdated, onD
     if (ok) onRemove();
   }, [note.id, onRemove]);
 
-  const handleDiscuss = useCallback(() => {
-    // Save pending changes first
+  const handlePickToChat = useCallback(() => {
+    // Save pending changes first so the picked note carries the latest text.
     if (bodyDirty) {
       updateNote(note.id, { body }).then(updated => {
         if (updated) onUpdated(updated);
       });
     }
-    onDiscuss(note);
-  }, [note, body, bodyDirty, onDiscuss, onUpdated]);
+    onPickToChat({ ...note, body });
+  }, [note, body, bodyDirty, onPickToChat, onUpdated]);
 
   return (
     <div ref={rootRef} className="note-popover" style={{ left: pos.x, top: pos.y }} onKeyDown={handleKeyDown}>
@@ -147,8 +147,8 @@ export function NotePopover({ note, placement, onClose, onRemove, onUpdated, onD
 
       {/* Actions */}
       <div className="note-actions-row">
-        <button className="note-btn note-btn-discuss" onClick={handleDiscuss}>
-          Discuss
+        <button className="note-btn note-btn-discuss" onClick={handlePickToChat} title="Attach this note's code and comment to the main chat">
+          Add to chat
         </button>
         <button
           className={`note-btn note-btn-resolve ${note.status === "resolved" ? "resolved" : ""}`}

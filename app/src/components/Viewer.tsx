@@ -2,10 +2,18 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { layout, prepare } from "@chenglou/pretext";
 import { useSetting } from "../hooks";
 import type { SelectionContext } from "../opencode";
+import type { ReviewState } from "../review";
 
 export interface Placement {
   x: number;
   y: number;
+}
+
+export interface MarkReviewArgs {
+  all?: boolean;
+  startLine?: number;
+  endLine?: number;
+  reviewed?: boolean;
 }
 
 interface Anchor {
@@ -25,6 +33,9 @@ interface Props {
   onCreateNote: (ctx: SelectionContext, placement?: Placement) => void;
   anchors?: Anchor[];
   onAnchorClick?: (id: string, placement?: Placement) => void;
+  review?: ReviewState | null;
+  onMarkReviewed?: (args: MarkReviewArgs) => void;
+  reloadToken?: number;
 }
 
 type Token = { content: string; color?: string };
@@ -44,6 +55,7 @@ const POPOVER_GAP = 8;
 const SCROLL_OFF_OPTIONS = [0, 3, 5, 8, 12];
 const ANCHOR_LANE_STEP = 7; // px between overlapping gutter markers
 const MAX_ANCHOR_LANES = 3; // cap so lanes never march into the line numbers
+const REVIEW_GUTTER = 6; // px reserved at the far left for the review status bar
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -161,7 +173,7 @@ function nextScrollOff(value: number) {
   return next ?? SCROLL_OFF_OPTIONS[0];
 }
 
-export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCreateNote, anchors = [], onAnchorClick }: Props) {
+export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCreateNote, anchors = [], onAnchorClick, review, onMarkReviewed, reloadToken }: Props) {
   const [content, setContent] = useState("");
   const [tokens, setTokens] = useState<Token[][] | null>(null);
   const [lang, setLang] = useState<string | null>(null);
@@ -498,12 +510,22 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
           setVisualAnchor(null);
           break;
         }
+        case "r": {
+          e.preventDefault();
+          if (!onMarkReviewed) break;
+          const cur = cursorRef.current;
+          const start = visualAnchor === null ? cur : Math.min(visualAnchor, cur);
+          const end = visualAnchor === null ? cur : Math.max(visualAnchor, cur);
+          onMarkReviewed({ startLine: start + 1, endLine: end + 1, reviewed: true });
+          setVisualAnchor(null);
+          break;
+        }
       }
     };
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onCreateNote, placementForRange, activeCursorAnchor, cursorAnchors, onAnchorClick]);
+  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onCreateNote, placementForRange, activeCursorAnchor, cursorAnchors, onAnchorClick, onMarkReviewed]);
 
   useEffect(() => {
     if (!filePath) {
@@ -543,7 +565,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
     return () => {
       cancelled = true;
     };
-  }, [filePath]);
+  }, [filePath, reloadToken]);
 
   const handleLineClick = useCallback((e: React.MouseEvent) => {
     const body = bodyRef.current;
@@ -573,8 +595,31 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
       <div className="viewer-header">
         <span className="viewer-path">{filePath}</span>
         <div className="viewer-actions">
+          {review && review.changed && (
+            <span className={`viewer-review ${review.fullyReviewed ? "done" : ""}`}>
+              <span className="viewer-review-label">
+                {review.fullyReviewed
+                  ? `${"\u2713"} reviewed`
+                  : `${review.unreviewedLineCount} unreviewed`}
+              </span>
+              {!review.fullyReviewed && (
+                <button
+                  className="viewer-review-btn"
+                  onClick={() => onMarkReviewed?.({ all: true, reviewed: true })}
+                  title="Mark the whole file reviewed"
+                >Review all</button>
+              )}
+              {(review.reviewedLineCount > 0 || review.fullyReviewed) && (
+                <button
+                  className="viewer-review-btn reset"
+                  onClick={() => onMarkReviewed?.({ all: true, reviewed: false })}
+                  title="Reset review — mark all changes unreviewed again"
+                >Reset</button>
+              )}
+            </span>
+          )}
           {visualAnchor !== null && (
-            <span className="viewer-mode">VISUAL LINE <span className="viewer-mode-hint">c chat · C note</span></span>
+            <span className="viewer-mode">VISUAL LINE <span className="viewer-mode-hint">c chat · C note · r review</span></span>
           )}
           {visualAnchor === null && activeCursorAnchor && (
             <span className={`viewer-anchor-hint ${activeCursorAnchor.open ? "open" : ""}`}>
@@ -646,7 +691,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
                   )}
                   <button
                     className={`viewer-anchor ${a.open ? "open" : ""} ${isActive ? "active" : ""} ${resolved ? "resolved" : ""}`}
-                    style={{ top: startMetric.top, height, left: lane * ANCHOR_LANE_STEP }}
+                    style={{ top: startMetric.top, height, left: REVIEW_GUTTER + lane * ANCHOR_LANE_STEP }}
                     title={`Note on lines ${a.startLine}\u2013${a.endLine}${resolved ? " (resolved)" : ""}`}
                     onMouseDown={e => {
                       e.stopPropagation();
@@ -665,9 +710,10 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
                   const isCursor = i === cursorLine;
                   const isSelected = i >= selectionStart && i <= selectionEnd;
                   const lineNumber = relNum && !isCursor ? Math.abs(i - cursorLine) : i + 1;
+                  const rev = review?.lineStatus?.[i];
                   return (
                     <span
-                      className={`line ${isCursor ? "cursor-line" : ""} ${isSelected ? "selected-line" : ""}`}
+                      className={`line ${isCursor ? "cursor-line" : ""} ${isSelected ? "selected-line" : ""} ${rev && rev !== "unchanged" ? `rev-${rev}` : ""}`}
                       key={i}
                       style={{ top: metric.top, minHeight: metric.height }}
                     >

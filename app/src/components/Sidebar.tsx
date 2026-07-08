@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSetting } from "../hooks";
+import { getReviewSummary } from "../review";
 import type { RootEntry, TreeNode } from "../types";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
   focused: boolean;
   onFocus: () => void;
   filesWithNotes?: Set<string>;
+  reviewVersion?: number;
 }
 
 // Flatten visible tree nodes for keyboard navigation
@@ -28,7 +30,7 @@ function flattenVisible(node: TreeNode, expanded: Set<string>, isRoot: boolean, 
   return result;
 }
 
-export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus, filesWithNotes }: Props) {
+export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus, filesWithNotes, reviewVersion }: Props) {
   const [width, setWidth] = useSetting("sidebar:width", 300);
   const [roots, setRoots] = useState<RootEntry[]>([]);
   const [currentRoot, setCurrentRoot] = useSetting<string | null>("currentRoot", null);
@@ -42,6 +44,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus, filesW
   const [browsePath, setBrowsePath] = useState<string | null>(null);
   const [browseDirs, setBrowseDirs] = useState<{ name: string; path: string }[]>([]);
   const [browseParent, setBrowseParent] = useState<string | null>(null);
+  const [filesWithUnreviewed, setFilesWithUnreviewed] = useState<Set<string>>(new Set());
   const dragging = useRef(false);
   const treeRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -68,6 +71,23 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus, filesW
       .then(setTree)
       .catch(() => setTree(null));
   }, [currentRoot, showHidden]);
+
+  // Load review summary for the current root; refresh when review changes.
+  useEffect(() => {
+    if (!currentRoot) { setFilesWithUnreviewed(new Set()); return; }
+    let cancelled = false;
+    getReviewSummary(currentRoot)
+      .then(sum => {
+        if (cancelled) return;
+        const s = new Set<string>();
+        for (const [path, info] of Object.entries(sum.files)) {
+          if (info.changed && !info.fullyReviewed) s.add(path);
+        }
+        setFilesWithUnreviewed(s);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentRoot, reviewVersion]);
 
   // Load saved expanded state
   useEffect(() => {
@@ -399,6 +419,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus, filesW
             cursor={cursor}
             onCursor={(path) => { setCursor(path); setTreeActive(true); searchRef.current?.blur(); }}
             filesWithNotes={filesWithNotes}
+            filesWithUnreviewed={filesWithUnreviewed}
             isRoot
           />
         ) : (
@@ -413,7 +434,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus, filesW
 }
 
 function TreeView({
-  node, depth, expanded, onToggle, onSelect, search, cursor, onCursor, filesWithNotes, isRoot,
+  node, depth, expanded, onToggle, onSelect, search, cursor, onCursor, filesWithNotes, filesWithUnreviewed, isRoot,
 }: {
   node: TreeNode;
   depth: number;
@@ -424,6 +445,7 @@ function TreeView({
   cursor: string | null;
   onCursor: (path: string) => void;
   filesWithNotes?: Set<string>;
+  filesWithUnreviewed?: Set<string>;
   isRoot?: boolean;
 }) {
   const isDir = node.type === "directory";
@@ -431,9 +453,11 @@ function TreeView({
   const matches = search ? matchesSearch(node, search) : true;
   const isCursor = cursor === node.path;
   const hasNote = !isDir && filesWithNotes?.has(node.path);
+  const hasUnreviewed = !isDir && filesWithUnreviewed?.has(node.path);
 
-  // For directories, check if any descendant has notes
+  // For directories, check if any descendant has notes / unreviewed changes.
   const dirHasNotes = isDir && filesWithNotes && hasDescendantWithNotes(node, filesWithNotes);
+  const dirHasUnreviewed = isDir && filesWithUnreviewed && hasDescendantWithNotes(node, filesWithUnreviewed);
 
   if (search && !matches) return null;
 
@@ -450,6 +474,12 @@ function TreeView({
             {isDir ? "\u25B8" : ""}
           </span>
           <span className="tree-label">{node.name}</span>
+          {(hasUnreviewed || (dirHasUnreviewed && !hasUnreviewed)) && (
+            <span
+              className={`tree-review-indicator ${dirHasUnreviewed && !hasUnreviewed ? "dir" : ""}`}
+              title={hasUnreviewed ? "Has unreviewed changes" : "Contains files with unreviewed changes"}
+            >{"\u25A0"}</span>
+          )}
           {hasNote && <span className="tree-note-indicator" title="Has unresolved notes">{"\u25CF"}</span>}
           {dirHasNotes && !hasNote && <span className="tree-note-indicator dir" title="Contains files with unresolved notes">{"\u25CF"}</span>}
         </div>
@@ -466,6 +496,7 @@ function TreeView({
           cursor={cursor}
           onCursor={onCursor}
           filesWithNotes={filesWithNotes}
+          filesWithUnreviewed={filesWithUnreviewed}
         />
       ))}
     </>

@@ -15,11 +15,12 @@ interface Props {
   onConsumeSelection: () => void;
   onSessionChange: (id: string | null) => void;
   activateSession: { id: string; token: number } | null;
+  onAfterPrompt?: () => void;
 }
 
 export function OpenCodePanel({
   open, onToggle, focused, onFocus,
-  pendingSelection, onConsumeSelection, onSessionChange, activateSession,
+  pendingSelection, onConsumeSelection, onSessionChange, activateSession, onAfterPrompt,
 }: Props) {
   const [width, setWidth] = useSetting("oc:width", 340);
   const [agent, setAgent] = useSetting<Agent>("oc:agent", "plan");
@@ -143,6 +144,7 @@ export function OpenCodePanel({
     }
 
     setLoading(false);
+    onAfterPrompt?.();
   };
 
   // Collapsed state: just show tab
@@ -210,8 +212,9 @@ export function OpenCodePanel({
         </div>
         {attached && (
           <div className="oc-chip-row">
-            <span className="oc-chip" title={attached.path}>
+            <span className="oc-chip" title={attached.note ? `${attached.path}\n\nNote: ${attached.note}` : attached.path}>
               <span className="oc-chip-label">{selectionLabel(attached)}</span>
+              {attached.note && <span className="oc-chip-note" title="Includes note comment">note</span>}
               <button className="oc-chip-remove" onClick={() => setAttached(null)} title="Remove context">&times;</button>
             </span>
           </div>

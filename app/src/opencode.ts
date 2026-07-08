@@ -31,6 +31,7 @@ export interface SelectionContext {
   endLine: number;
   text: string;
   lang?: string;
+  note?: string; // optional human comment (when picked from a note)
 }
 
 const BASE = "/api/opencode";

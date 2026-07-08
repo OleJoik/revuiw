@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./components/Sidebar";
-import { Viewer, type Placement } from "./components/Viewer";
+import { Viewer, type Placement, type MarkReviewArgs } from "./components/Viewer";
 import { OpenCodePanel } from "./components/OpenCodePanel";
 import { NotePopover } from "./components/NotePopover";
 import { useSetting } from "./hooks";
 import { listNotes, createNote, type Note, type NoteCreate } from "./notes";
+import { getReview, markReview, type ReviewState } from "./review";
 import type { Panel } from "./types";
 import type { SelectionContext } from "./opencode";
 
@@ -19,6 +20,11 @@ export function App() {
   const [openNoteIds, setOpenNoteIds] = useState<string[]>([]);
   const [notePlacements, setNotePlacements] = useState<Map<string, Placement>>(new Map());
 
+  // Review state for the currently-open file, plus refresh tokens.
+  const [review, setReview] = useState<ReviewState | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);   // re-read file content (after agent edits)
+  const [reviewVersion, setReviewVersion] = useState(0); // refresh sidebar review summary
+
   // Selection -> chat wiring (flow A: main panel).
   const [pendingSelection, setPendingSelection] = useState<SelectionContext | null>(null);
   const [mainSessionId, setMainSessionId] = useState<string | null>(null);
@@ -27,6 +33,29 @@ export function App() {
   // Load notes from server on mount
   useEffect(() => {
     listNotes().then(setNotes).catch(() => {});
+  }, []);
+
+  // Load review state whenever the file changes or content is reloaded.
+  useEffect(() => {
+    if (!selectedFile) { setReview(null); return; }
+    let cancelled = false;
+    getReview(selectedFile).then(r => { if (!cancelled) setReview(r); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [selectedFile, reloadToken]);
+
+  const onMarkReviewed = useCallback(async (args: MarkReviewArgs) => {
+    if (!selectedFile) return;
+    const next = await markReview({ path: selectedFile, ...args });
+    if (next) setReview(next);
+    setReviewVersion(v => v + 1);
+  }, [selectedFile]);
+
+  // Called after a chat prompt completes: the agent may have edited files, so
+  // re-read the viewer content (which re-derives the review overlay) and
+  // refresh the sidebar summary.
+  const onAfterPrompt = useCallback(() => {
+    setReloadToken(t => t + 1);
+    setReviewVersion(v => v + 1);
   }, []);
 
   const openChat = useCallback(() => {
@@ -84,15 +113,17 @@ export function App() {
     setNotes(prev => prev.map(n => n.id === updated.id ? updated : n));
   }, []);
 
-  // "Discuss" injects the note context into the main chat panel
-  const discussNote = useCallback((note: Note) => {
+  // Pick a note into the main chat context: attach its code snippet plus the
+  // human-written comment. Fast path for "discuss this later with the agent"
+  // without spinning up a per-note conversation.
+  const pickNoteToChat = useCallback((note: Note) => {
     const ctx: SelectionContext = {
       path: note.file,
       startLine: note.startLine,
       endLine: note.endLine,
       text: note.originalSnippet,
+      note: note.body || undefined,
     };
-    // Include the note body as part of the context message
     setPendingSelection(ctx);
     openChat();
   }, [openChat]);
@@ -183,6 +214,7 @@ export function App() {
         focused={focusedPanel === "sidebar"}
         onFocus={() => setFocusedPanel("sidebar")}
         filesWithNotes={filesWithNotes}
+        reviewVersion={reviewVersion}
       />
       <Viewer
         filePath={selectedFile}
@@ -193,6 +225,9 @@ export function App() {
         onCreateNote={createNoteFromSelection}
         anchors={anchors}
         onAnchorClick={toggleNote}
+        review={review}
+        onMarkReviewed={onMarkReviewed}
+        reloadToken={reloadToken}
       />
       <OpenCodePanel
         open={ocOpen}
@@ -203,6 +238,7 @@ export function App() {
         onConsumeSelection={() => setPendingSelection(null)}
         onSessionChange={setMainSessionId}
         activateSession={activateSession}
+        onAfterPrompt={onAfterPrompt}
       />
       {notes.filter(n => openNoteIds.includes(n.id)).map(n => (
         <NotePopover
@@ -212,7 +248,7 @@ export function App() {
           onClose={() => closeNote(n.id)}
           onRemove={() => removeNote(n.id)}
           onUpdated={handleNoteUpdated}
-          onDiscuss={discussNote}
+          onPickToChat={pickNoteToChat}
         />
       ))}
     </div>
