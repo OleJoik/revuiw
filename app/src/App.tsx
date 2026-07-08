@@ -148,7 +148,7 @@ export function App() {
       <Sidebar
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
-        onSelectFile={setSelectedFile}
+        onSelectFile={(path) => { setSelectedFile(path); setFocusedPanel("viewer"); }}
         focused={focusedPanel === "sidebar"}
         onFocus={() => setFocusedPanel("sidebar")}
       />
