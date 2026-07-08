@@ -259,6 +259,24 @@ Bun.serve({
         });
       }
 
+      if (pathname === "/api/dirs") {
+        const dir = resolve(url.searchParams.get("path") || "/");
+        try {
+          const entries = await readdir(dir, { withFileTypes: true });
+          const dirs = entries
+            .filter(e => e.isDirectory() && !e.name.startsWith(".") && !EXCLUDED.has(e.name))
+            .map(e => ({ name: e.name, path: join(dir, e.name) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          return new Response(JSON.stringify({ parent: dirname(dir), current: dir, dirs }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch {
+          return new Response(JSON.stringify({ parent: dirname(dir), current: dir, dirs: [] }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
+
       if (pathname === "/api/tree") {
         const dirPath = url.searchParams.get("path");
         const showHidden = url.searchParams.get("showHidden") === "true";

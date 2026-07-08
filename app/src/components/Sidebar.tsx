@@ -37,7 +37,9 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
   const [cursor, setCursor] = useState<string | null>(null);
   const [treeActive, setTreeActive] = useState(false);
   const [showRootPicker, setShowRootPicker] = useState(false);
-  const [addingRoot, setAddingRoot] = useState("");
+  const [browsePath, setBrowsePath] = useState<string | null>(null);
+  const [browseDirs, setBrowseDirs] = useState<{ name: string; path: string }[]>([]);
+  const [browseParent, setBrowseParent] = useState<string | null>(null);
   const dragging = useRef(false);
   const treeRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -247,10 +249,21 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
         setRoots(data);
         const added = data[data.length - 1];
         if (added) setCurrentRoot(added.path);
-        setAddingRoot("");
+        setBrowsePath(null);
         setShowRootPicker(false);
       })
       .catch(() => {});
+  };
+
+  const browseTo = (path: string) => {
+    setBrowsePath(path);
+    fetch(`/api/dirs?path=${encodeURIComponent(path)}`)
+      .then(r => r.json())
+      .then(data => {
+        setBrowseDirs(data.dirs);
+        setBrowseParent(data.parent !== data.current ? data.parent : null);
+      })
+      .catch(() => { setBrowseDirs([]); setBrowseParent(null); });
   };
 
   const removeRoot = (path: string) => {
@@ -331,7 +344,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
             <div
               key={r.path}
               className={`sidebar-root-item ${r.path === currentRoot ? "active" : ""}`}
-              onClick={() => { setCurrentRoot(r.path); setShowRootPicker(false); }}
+              onClick={() => { setCurrentRoot(r.path); setShowRootPicker(false); setBrowsePath(null); }}
             >
               <span className="sidebar-root-item-label">{r.label}{r.branch ? ` [${r.branch}]` : ""}</span>
               {roots.length > 1 && (
@@ -343,16 +356,29 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
               )}
             </div>
           ))}
-          <div className="sidebar-root-add-row">
-            <input
-              type="text"
-              placeholder="Add path..."
-              value={addingRoot}
-              onChange={e => setAddingRoot(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") addRoot(addingRoot); }}
-            />
-            <button onClick={() => addRoot(addingRoot)} disabled={!addingRoot.trim()}>Add</button>
-          </div>
+          {!browsePath ? (
+            <button className="sidebar-browse-btn" onClick={() => browseTo("/")}>
+              Browse folders...
+            </button>
+          ) : (
+            <div className="sidebar-browse">
+              <div className="sidebar-browse-header">
+                {browseParent && (
+                  <button className="sidebar-browse-up" onClick={() => browseTo(browseParent)}>&larr;</button>
+                )}
+                <span className="sidebar-browse-path" title={browsePath}>{browsePath}</span>
+                <button className="sidebar-browse-select" onClick={() => addRoot(browsePath)}>Select</button>
+              </div>
+              <div className="sidebar-browse-list">
+                {browseDirs.map(d => (
+                  <div key={d.path} className="sidebar-browse-dir" onClick={() => browseTo(d.path)}>
+                    {d.name}
+                  </div>
+                ))}
+                {browseDirs.length === 0 && <div className="sidebar-browse-empty">No subdirectories</div>}
+              </div>
+            </div>
+          )}
         </div>
       )}
       <div className="sidebar-search">
