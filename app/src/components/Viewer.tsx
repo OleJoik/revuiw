@@ -170,6 +170,8 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
   const bodyRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef(0);
   const countRef = useRef("");
+  const cursorMapRef = useRef<Map<string, number>>(new Map());
+  const prevFileRef = useRef<string | null>(null);
 
   const plainLines = useMemo(() => splitLines(content), [content]);
   const lines = plainLines;
@@ -237,8 +239,14 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
   }, [centerLine, ensureVisible, lineCount]);
 
   useEffect(() => {
-    cursorRef.current = 0;
-    setCursorLine(0);
+    if (prevFileRef.current && prevFileRef.current !== filePath) {
+      cursorMapRef.current.set(prevFileRef.current, cursorRef.current);
+    }
+    prevFileRef.current = filePath;
+
+    const saved = filePath ? cursorMapRef.current.get(filePath) ?? 0 : 0;
+    cursorRef.current = saved;
+    setCursorLine(saved);
     setVisualAnchor(null);
     if (bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [filePath]);
