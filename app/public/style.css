@@ -57,6 +57,10 @@ html, body, #root {
   background: var(--bg-hover);
 }
 
+.panel-focused .tree-node.cursor {
+  background: rgba(136, 176, 255, 0.12);
+}
+
 .tree-navigating .tree-node.cursor {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
@@ -392,10 +396,15 @@ html, body, #root {
   position: absolute;
   left: 0;
   right: 0;
-  background: rgba(136, 176, 255, 0.08);
-  border-left: 2px solid var(--accent);
+  background: rgba(136, 176, 255, 0.04);
+  border-left: 2px solid var(--border);
   pointer-events: none;
   z-index: 1;
+}
+
+.panel-focused .viewer-cursor {
+  background: rgba(136, 176, 255, 0.10);
+  border-left: 2px solid var(--accent);
 }
 
 .viewer-body .viewer-code {
@@ -433,6 +442,11 @@ html, body, #root {
 }
 
 .viewer-body .cursor-line .line-number {
+  color: var(--fg-muted);
+  opacity: 0.7;
+}
+
+.panel-focused .viewer-body .cursor-line .line-number {
   color: var(--accent);
   opacity: 1;
 }
