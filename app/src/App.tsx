@@ -2,12 +2,11 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Viewer } from "./components/Viewer";
 import { OpenCodePanel } from "./components/OpenCodePanel";
-import { SelectionChat } from "./components/SelectionChat";
+import { NotePopover } from "./components/NotePopover";
 import { useSetting } from "./hooks";
+import { listNotes, createNote, type Note, type NoteCreate } from "./notes";
 import type { Panel } from "./types";
-import type { PopoverPlacement, SelectionContext, SelectionThread } from "./opencode";
-
-let threadSeq = 0;
+import type { SelectionContext } from "./opencode";
 
 export function App() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -15,18 +14,19 @@ export function App() {
   const [ocOpen, setOcOpen] = useSetting("oc:open", false);
   const [focusedPanel, setFocusedPanel] = useState<Panel>("viewer");
 
-  // Selection -> chat wiring.
-  // `pendingSelection` is the chip queued for the main panel (flow A).
-  // `threads` are persistent selection-anchored chats (flow B); their anchors
-  // live in the Viewer gutter. `openIds` tracks which are currently popped open
-  // (kept out of storage so nothing auto-reopens on reload).
-  // `mainSessionId` is reported by the panel so new threads know what to fork.
-  // `activateSession` asks the panel to switch to a session (promote flow).
+  // Notes state
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [openNoteIds, setOpenNoteIds] = useState<string[]>([]);
+
+  // Selection -> chat wiring (flow A: main panel).
   const [pendingSelection, setPendingSelection] = useState<SelectionContext | null>(null);
-  const [threads, setThreads] = useSetting<SelectionThread[]>("threads", []);
-  const [openIds, setOpenIds] = useState<string[]>([]);
   const [mainSessionId, setMainSessionId] = useState<string | null>(null);
   const [activateSession, setActivateSession] = useState<{ id: string; token: number } | null>(null);
+
+  // Load notes from server on mount
+  useEffect(() => {
+    listNotes().then(setNotes).catch(() => {});
+  }, []);
 
   const openChat = useCallback(() => {
     setOcOpen(true);
@@ -38,39 +38,56 @@ export function App() {
     openChat();
   }, [openChat]);
 
-  const openSelectionChat = useCallback((ctx: SelectionContext, placement?: PopoverPlacement) => {
-    const id = `sel-${Date.now().toString(36)}-${++threadSeq}`;
-    setThreads(prev => [...prev, { id, ...ctx, parentSessionId: mainSessionId, sessionId: null, placement }]);
-    setOpenIds(prev => [...prev, id]);
-  }, [mainSessionId, setThreads]);
+  // Create a new note from a code selection (flow B: press C)
+  const createNoteFromSelection = useCallback(async (ctx: SelectionContext) => {
+    const lines = ctx.text.split("\n");
+    const anchorLine = ctx.startLine;
+    const anchorText = lines[0] || "";
+    const data: NoteCreate = {
+      file: ctx.path,
+      anchorLine,
+      anchorText,
+      originalSnippet: ctx.text,
+      startLine: ctx.startLine,
+      endLine: ctx.endLine,
+      body: "",
+    };
+    const note = await createNote(data);
+    if (note) {
+      setNotes(prev => [...prev, note]);
+      setOpenNoteIds(prev => [...prev, note.id]);
+    }
+  }, []);
 
-  // Close popover but keep the anchor — unless it was never used (no session),
-  // in which case discard it so stray `C` presses don't litter the gutter.
-  const closeThread = useCallback((id: string) => {
-    setOpenIds(prev => prev.filter(x => x !== id));
-    setThreads(prev => {
-      const t = prev.find(x => x.id === id);
-      return t && !t.sessionId ? prev.filter(x => x.id !== id) : prev;
-    });
-  }, [setThreads]);
+  const closeNote = useCallback((id: string) => {
+    setOpenNoteIds(prev => prev.filter(x => x !== id));
+  }, []);
 
-  const toggleThread = useCallback((id: string, placement?: PopoverPlacement) => {
-    if (placement) setThreads(prev => prev.map(t => t.id === id ? { ...t, placement } : t));
-    setOpenIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  }, [setThreads]);
+  const toggleNote = useCallback((id: string) => {
+    setOpenNoteIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }, []);
 
-  const removeThread = useCallback((id: string) => {
-    setOpenIds(prev => prev.filter(x => x !== id));
-    setThreads(prev => prev.filter(t => t.id !== id));
-  }, [setThreads]);
+  const removeNote = useCallback((id: string) => {
+    setOpenNoteIds(prev => prev.filter(x => x !== id));
+    setNotes(prev => prev.filter(n => n.id !== id));
+  }, []);
 
-  const setThreadSession = useCallback((id: string, sessionId: string) => {
-    setThreads(prev => prev.map(t => t.id === id ? { ...t, sessionId } : t));
-  }, [setThreads]);
+  const handleNoteUpdated = useCallback((updated: Note) => {
+    setNotes(prev => prev.map(n => n.id === updated.id ? updated : n));
+  }, []);
 
-  const promoteSession = useCallback((sessionId: string, threadId: string) => {
-    setActivateSession({ id: sessionId, token: Date.now() });
-    setOpenIds(prev => prev.filter(x => x !== threadId));
+  // "Discuss" injects the note context into the main chat panel
+  const discussNote = useCallback((note: Note) => {
+    const ctx: SelectionContext = {
+      path: note.file,
+      startLine: note.startLine,
+      endLine: note.endLine,
+      text: note.originalSnippet,
+    };
+    // Include the note body as part of the context message
+    setPendingSelection(ctx);
     openChat();
   }, [openChat]);
 
@@ -86,7 +103,6 @@ export function App() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      // Ctrl+e: toggle explorer
       if (e.ctrlKey && e.key === "e") {
         e.preventDefault();
         if (sidebarOpen && focusedPanel === "sidebar") {
@@ -98,7 +114,6 @@ export function App() {
         return;
       }
 
-      // Ctrl+s: toggle chat
       if (e.ctrlKey && e.key === "s") {
         e.preventDefault();
         if (ocOpen && focusedPanel === "chat") {
@@ -110,7 +125,6 @@ export function App() {
         return;
       }
 
-      // Ctrl+h / Ctrl+ArrowLeft: focus panel to the left
       if (e.ctrlKey && (e.key === "h" || e.key === "ArrowLeft")) {
         e.preventDefault();
         const panels = getVisiblePanels();
@@ -119,7 +133,6 @@ export function App() {
         return;
       }
 
-      // Ctrl+l / Ctrl+ArrowRight: focus panel to the right
       if (e.ctrlKey && (e.key === "l" || e.key === "ArrowRight")) {
         e.preventDefault();
         const panels = getVisiblePanels();
@@ -139,9 +152,21 @@ export function App() {
     if (focusedPanel === "chat" && !ocOpen) setFocusedPanel("viewer");
   }, [sidebarOpen, ocOpen]);
 
-  const anchors = threads
-    .filter(t => t.path === selectedFile)
-    .map(t => ({ id: t.id, startLine: t.startLine, endLine: t.endLine, open: openIds.includes(t.id) }));
+  // Build anchors for the Viewer from notes on the current file
+  const anchors = notes
+    .filter(n => n.file === selectedFile)
+    .map(n => ({
+      id: n.id,
+      startLine: n.startLine,
+      endLine: n.endLine,
+      open: openNoteIds.includes(n.id),
+      status: n.status,
+    }));
+
+  // Compute set of files with unresolved notes for the sidebar
+  const filesWithNotes = new Set(
+    notes.filter(n => n.status === "unresolved").map(n => n.file)
+  );
 
   return (
     <div className="app-layout">
@@ -151,6 +176,7 @@ export function App() {
         onSelectFile={(path) => { setSelectedFile(path); setFocusedPanel("viewer"); }}
         focused={focusedPanel === "sidebar"}
         onFocus={() => setFocusedPanel("sidebar")}
+        filesWithNotes={filesWithNotes}
       />
       <Viewer
         filePath={selectedFile}
@@ -158,9 +184,9 @@ export function App() {
         focused={focusedPanel === "viewer"}
         onFocus={() => setFocusedPanel("viewer")}
         onSendToChat={sendSelectionToChat}
-        onOpenSelectionChat={openSelectionChat}
+        onCreateNote={createNoteFromSelection}
         anchors={anchors}
-        onAnchorClick={toggleThread}
+        onAnchorClick={toggleNote}
       />
       <OpenCodePanel
         open={ocOpen}
@@ -172,14 +198,14 @@ export function App() {
         onSessionChange={setMainSessionId}
         activateSession={activateSession}
       />
-      {threads.filter(t => openIds.includes(t.id)).map(t => (
-        <SelectionChat
-          key={t.id}
-          thread={t}
-          onClose={() => closeThread(t.id)}
-          onRemove={() => removeThread(t.id)}
-          onSessionCreated={(sessionId) => setThreadSession(t.id, sessionId)}
-          onPromote={(sessionId) => promoteSession(sessionId, t.id)}
+      {notes.filter(n => openNoteIds.includes(n.id)).map(n => (
+        <NotePopover
+          key={n.id}
+          note={n}
+          onClose={() => closeNote(n.id)}
+          onRemove={() => removeNote(n.id)}
+          onUpdated={handleNoteUpdated}
+          onDiscuss={discussNote}
         />
       ))}
     </div>

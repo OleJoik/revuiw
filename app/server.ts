@@ -1,6 +1,7 @@
-import { readdir, readFile, writeFile, mkdir, stat } from "fs/promises";
+import { readdir, readFile, writeFile, mkdir, stat, unlink } from "fs/promises";
 import { join, relative, resolve, dirname, basename, extname } from "path";
 import { homedir } from "os";
+import { randomUUID } from "crypto";
 import { createHighlighter, type Highlighter } from "shiki";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 import homepage from "./public/index.html";
@@ -113,8 +114,70 @@ function buildPromptParts(message: string, context?: SelectionContext | null): P
   return parts;
 }
 
-const EXCLUDED = new Set(["node_modules", ".git", "dist"]);
+const EXCLUDED = new Set(["node_modules", ".git", "dist", ".revuiw"]);
 const ROOTS_FILE = join(homedir(), ".filetree", "roots.json");
+
+// --- Notes storage (.revuiw/notes/) ---
+
+interface NoteData {
+  id: string;
+  file: string;
+  anchorLine: number;
+  anchorText: string;
+  originalSnippet: string;
+  startLine: number;
+  endLine: number;
+  status: "unresolved" | "resolved";
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function notesDir(): string {
+  return join(process.cwd(), ".revuiw", "notes");
+}
+
+async function ensureNotesDir(): Promise<void> {
+  await mkdir(notesDir(), { recursive: true });
+}
+
+async function loadAllNotes(): Promise<NoteData[]> {
+  await ensureNotesDir();
+  const dir = notesDir();
+  const entries = await readdir(dir);
+  const notes: NoteData[] = [];
+  for (const entry of entries) {
+    if (!entry.endsWith(".json")) continue;
+    try {
+      const data = await readFile(join(dir, entry), "utf-8");
+      notes.push(JSON.parse(data));
+    } catch {}
+  }
+  return notes.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+async function loadNote(id: string): Promise<NoteData | null> {
+  try {
+    const data = await readFile(join(notesDir(), `${id}.json`), "utf-8");
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
+async function saveNote(note: NoteData): Promise<void> {
+  await ensureNotesDir();
+  await writeFile(join(notesDir(), `${note.id}.json`), JSON.stringify(note, null, 2));
+}
+
+async function deleteNoteFile(id: string): Promise<boolean> {
+  try {
+    await unlink(join(notesDir(), `${id}.json`));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface TreeNode {
   name: string;
@@ -337,6 +400,64 @@ Bun.serve({
         dirs.sort((a, b) => a.name.localeCompare(b.name));
 
         return new Response(JSON.stringify({ path: resolved, parent, isGit, branch, dirs }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // --- Notes API endpoints ---
+
+      if (pathname === "/api/notes" && req.method === "GET") {
+        const notes = await loadAllNotes();
+        return new Response(JSON.stringify(notes), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (pathname === "/api/notes" && req.method === "POST") {
+        const body = await req.json();
+        const now = new Date().toISOString();
+        const note: NoteData = {
+          id: randomUUID(),
+          file: body.file,
+          anchorLine: body.anchorLine,
+          anchorText: body.anchorText || "",
+          originalSnippet: body.originalSnippet || "",
+          startLine: body.startLine || body.anchorLine,
+          endLine: body.endLine || body.anchorLine,
+          status: "unresolved",
+          body: body.body || "",
+          createdAt: now,
+          updatedAt: now,
+        };
+        await saveNote(note);
+        return new Response(JSON.stringify(note), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const noteIdMatch = pathname.match(/^\/api\/notes\/([^/]+)$/);
+      if (noteIdMatch && req.method === "PATCH") {
+        const id = noteIdMatch[1];
+        const existing = await loadNote(id);
+        if (!existing) return new Response(JSON.stringify({ error: "Not found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+        const body = await req.json();
+        if (body.body !== undefined) existing.body = body.body;
+        if (body.status !== undefined) existing.status = body.status;
+        if (body.anchorLine !== undefined) existing.anchorLine = body.anchorLine;
+        if (body.anchorText !== undefined) existing.anchorText = body.anchorText;
+        existing.updatedAt = new Date().toISOString();
+        await saveNote(existing);
+        return new Response(JSON.stringify(existing), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (noteIdMatch && req.method === "DELETE") {
+        const id = noteIdMatch[1];
+        const ok = await deleteNoteFile(id);
+        if (!ok) return new Response(JSON.stringify({ error: "Not found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json" },
         });
       }

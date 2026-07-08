@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { layout, prepare } from "@chenglou/pretext";
 import { useSetting } from "../hooks";
-import type { PopoverPlacement, SelectionContext } from "../opencode";
+import type { SelectionContext } from "../opencode";
 
 interface Anchor {
   id: string;
   startLine: number;
   endLine: number;
   open: boolean;
+  status?: "unresolved" | "resolved";
 }
 
 interface Props {
@@ -16,9 +17,9 @@ interface Props {
   focused: boolean;
   onFocus: () => void;
   onSendToChat: (ctx: SelectionContext) => void;
-  onOpenSelectionChat: (ctx: SelectionContext, placement?: PopoverPlacement) => void;
+  onCreateNote: (ctx: SelectionContext) => void;
   anchors?: Anchor[];
-  onAnchorClick?: (id: string, placement?: PopoverPlacement) => void;
+  onAnchorClick?: (id: string) => void;
 }
 
 type Token = { content: string; color?: string };
@@ -32,9 +33,6 @@ const CODE_PAD_LEFT = LINE_NUMBER_WIDTH;
 const CODE_PAD_RIGHT = 16;
 const TAB_SIZE = 2;
 const OVERSCAN_PX = 600;
-const POPOVER_WIDTH = 400;
-const POPOVER_ESTIMATED_HEIGHT = 420;
-const POPOVER_GAP = 8;
 const SCROLL_OFF_OPTIONS = [0, 3, 5, 8, 12];
 const ANCHOR_LANE_STEP = 7; // px between overlapping gutter markers
 const MAX_ANCHOR_LANES = 3; // cap so lanes never march into the line numbers
@@ -155,7 +153,7 @@ function nextScrollOff(value: number) {
   return next ?? SCROLL_OFF_OPTIONS[0];
 }
 
-export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOpenSelectionChat, anchors = [], onAnchorClick }: Props) {
+export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCreateNote, anchors = [], onAnchorClick }: Props) {
   const [content, setContent] = useState("");
   const [tokens, setTokens] = useState<Token[][] | null>(null);
   const [lang, setLang] = useState<string | null>(null);
@@ -284,25 +282,6 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
     };
   }, [filePath, loading]);
 
-  const placementForRange = useCallback((start: number, end: number): PopoverPlacement | undefined => {
-    const body = bodyRef.current;
-    const startMetric = metrics[start];
-    const endMetric = metrics[end] ?? startMetric;
-    if (!body || !startMetric || !endMetric) return undefined;
-
-    const rect = body.getBoundingClientRect();
-    const selectionTop = rect.top + startMetric.top - body.scrollTop;
-    const selectionBottom = rect.top + endMetric.top + endMetric.height - body.scrollTop;
-    const x = clamp(rect.left + CODE_PAD_LEFT - body.scrollLeft, 12, window.innerWidth - POPOVER_WIDTH - 12);
-    const below = selectionBottom + POPOVER_GAP;
-    const above = selectionTop - POPOVER_GAP - POPOVER_ESTIMATED_HEIGHT;
-    const y = below + POPOVER_ESTIMATED_HEIGHT <= window.innerHeight - 12
-      ? below
-      : clamp(above, 12, window.innerHeight - POPOVER_ESTIMATED_HEIGHT - 12);
-
-    return { x, y };
-  }, [metrics]);
-
   const cursorAnchors = useMemo(() => {
     const line = cursorLine + 1;
     return anchors
@@ -399,10 +378,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
       if (activeCursorAnchor && e.key === "Enter") {
         e.preventDefault();
         countRef.current = "";
-        onAnchorClick?.(
-          activeCursorAnchor.id,
-          placementForRange(activeCursorAnchor.startLine - 1, activeCursorAnchor.endLine - 1),
-        );
+        onAnchorClick?.(activeCursorAnchor.id);
         return;
       }
 
@@ -486,9 +462,9 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
             text: plainLines.slice(start, end + 1).join("\n"),
             lang: lang || undefined,
           };
-          // c -> attach to main chat (flow A); C -> open floating chat (flow B)
+          // c -> attach to main chat (flow A); C -> create a note (flow B)
           if (e.key === "c") onSendToChat(sel);
-          else onOpenSelectionChat(sel, placementForRange(start, end));
+          else onCreateNote(sel);
           setVisualAnchor(null);
           break;
         }
@@ -497,7 +473,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onOpenSelectionChat, placementForRange, activeCursorAnchor, cursorAnchors, onAnchorClick]);
+  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onCreateNote, activeCursorAnchor, cursorAnchors, onAnchorClick]);
 
   useEffect(() => {
     if (!filePath) {
@@ -568,11 +544,11 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
         <span className="viewer-path">{filePath}</span>
         <div className="viewer-actions">
           {visualAnchor !== null && (
-            <span className="viewer-mode">VISUAL LINE <span className="viewer-mode-hint">c chat · C float</span></span>
+            <span className="viewer-mode">VISUAL LINE <span className="viewer-mode-hint">c chat · C note</span></span>
           )}
           {visualAnchor === null && activeCursorAnchor && (
             <span className={`viewer-anchor-hint ${activeCursorAnchor.open ? "open" : ""}`}>
-              CHAT
+              NOTE
               <span className="viewer-anchor-hint-keys">
                 {activeCursorAnchor.open ? "Enter close" : "Enter open"}
                 {cursorAnchors.length > 1 && ` · Tab cycle ${activeAnchorIndex + 1}/${cursorAnchors.length}`}
@@ -629,6 +605,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
               const height = endMetric.top + endMetric.height - startMetric.top;
               const isActive = activeCursorAnchor?.id === a.id;
               const lane = Math.min(anchorLanes.get(a.id) ?? 0, MAX_ANCHOR_LANES - 1);
+              const resolved = a.status === "resolved";
               return (
                 <React.Fragment key={a.id}>
                   {(a.open || isActive) && (
@@ -638,13 +615,13 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onOp
                     />
                   )}
                   <button
-                    className={`viewer-anchor ${a.open ? "open" : ""} ${isActive ? "active" : ""}`}
+                    className={`viewer-anchor ${a.open ? "open" : ""} ${isActive ? "active" : ""} ${resolved ? "resolved" : ""}`}
                     style={{ top: startMetric.top, height, left: lane * ANCHOR_LANE_STEP }}
-                    title={`Chat about lines ${a.startLine}\u2013${a.endLine}`}
+                    title={`Note on lines ${a.startLine}\u2013${a.endLine}${resolved ? " (resolved)" : ""}`}
                     onMouseDown={e => {
                       e.stopPropagation();
                       e.preventDefault();
-                      onAnchorClick?.(a.id, placementForRange(a.startLine - 1, a.endLine - 1));
+                      onAnchorClick?.(a.id);
                     }}
                   />
                 </React.Fragment>

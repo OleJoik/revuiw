@@ -1,8 +1,7 @@
 // Shared OpenCode client + types.
 //
-// Both the main chat panel and the ephemeral selection popovers talk to the
-// OpenCode server through this module so that session handling, forking and
-// prompt-building stay consistent across every surface.
+// The main chat panel talks to the OpenCode server through this module.
+// Notes now handle their own persistence separately via the notes API.
 
 export type Agent = "plan" | "build";
 
@@ -32,25 +31,6 @@ export interface SelectionContext {
   endLine: number;
   text: string;
   lang?: string;
-}
-
-export interface PopoverPlacement {
-  x: number;
-  y: number;
-}
-
-// A persistent selection-anchored chat. Survives closing the popover: the
-// anchor stays in the Viewer gutter and reopening reloads history from the
-// backing (forked) session.
-export interface SelectionThread extends SelectionContext {
-  id: string;
-  parentSessionId: string | null; // session this forked from at creation
-  sessionId: string | null;       // backing session, once a message is sent
-  placement?: PopoverPlacement;
-}
-
-export function threadContext(t: SelectionThread): SelectionContext {
-  return { path: t.path, startLine: t.startLine, endLine: t.endLine, text: t.text, lang: t.lang };
 }
 
 const BASE = "/api/opencode";

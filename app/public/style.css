@@ -532,6 +532,23 @@ html, body, #root {
   color: var(--fg-file);
 }
 
+/* Note indicators in file tree */
+.tree-note-indicator {
+  font-size: 8px;
+  color: #f9e2af;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.tree-note-indicator.dir {
+  color: #f9e2af;
+  opacity: 0.5;
+}
+
+.tree-node.has-note .tree-label {
+  color: #f9e2af;
+}
+
 /* ---- Viewer ---- */
 
 .viewer {
@@ -1204,7 +1221,9 @@ html, body, #root {
 
 /* ---- Selection chat popover (flow B) ---- */
 
-.sel-chat {
+/* ---- Note Popover (replaces sel-chat) ---- */
+
+.note-popover {
   position: fixed;
   width: 400px;
   max-height: 60vh;
@@ -1218,7 +1237,7 @@ html, body, #root {
   overflow: hidden;
 }
 
-.sel-chat-header {
+.note-popover-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1230,23 +1249,45 @@ html, body, #root {
   flex-shrink: 0;
 }
 
-.sel-chat-title {
+.note-popover-title {
   font-size: 11px;
   font-weight: 600;
   color: var(--accent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.sel-chat-header-actions {
+.note-status-badge {
+  font-size: 9px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.note-status-badge.unresolved {
+  background: rgba(249, 226, 175, 0.15);
+  color: #f9e2af;
+}
+
+.note-status-badge.resolved {
+  background: rgba(166, 227, 161, 0.15);
+  color: #a6e3a1;
+}
+
+.note-popover-actions {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
 }
 
-.sel-chat-btn {
+.note-btn {
   padding: 2px 7px;
   background: var(--bg-hover);
   border: 1px solid var(--border);
@@ -1257,17 +1298,12 @@ html, body, #root {
   cursor: pointer;
 }
 
-.sel-chat-btn:hover:not(:disabled) {
+.note-btn:hover {
   background: var(--bg-active);
   color: var(--accent);
 }
 
-.sel-chat-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.sel-chat-close {
+.note-close {
   background: none;
   border: none;
   color: var(--fg-muted);
@@ -1277,27 +1313,108 @@ html, body, #root {
   padding: 0 2px;
 }
 
-.sel-chat-close:hover {
+.note-close:hover {
   color: var(--fg);
 }
 
-.sel-chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 80px;
+.note-snippet-section {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
 }
 
-.sel-chat-messages::-webkit-scrollbar {
-  width: 5px;
+.note-snippet-toggle {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-family: var(--font);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 0;
 }
 
-.sel-chat-messages::-webkit-scrollbar-thumb {
-  background: var(--border);
+.note-snippet-toggle:hover {
+  color: var(--fg);
+}
+
+.note-snippet-code {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-x: auto;
+  max-height: 150px;
+  overflow-y: auto;
+  white-space: pre;
+  color: var(--fg-muted);
+}
+
+.note-body-section {
+  padding: 8px;
+  position: relative;
+}
+
+.note-body-textarea {
+  width: 100%;
+  min-height: 80px;
+  max-height: 200px;
+  resize: vertical;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.note-body-textarea:focus {
+  border-color: var(--accent);
+}
+
+.note-body-textarea::placeholder {
+  color: var(--fg-muted);
+}
+
+.note-unsaved-indicator {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 9px;
+  color: #f9e2af;
+  opacity: 0.7;
+}
+
+.note-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.note-btn-discuss {
+  background: rgba(137, 180, 250, 0.12);
+  border-color: rgba(137, 180, 250, 0.3);
+  color: var(--accent);
+}
+
+.note-btn-discuss:hover {
+  background: rgba(137, 180, 250, 0.25);
+}
+
+.note-btn-resolve {
+  margin-left: auto;
+}
+
+.note-btn-resolve.resolved {
+  background: rgba(166, 227, 161, 0.12);
+  border-color: rgba(166, 227, 161, 0.3);
+  color: #a6e3a1;
 }
 
 /* ---- Gutter anchor markers (persistent selection threads) ---- */
@@ -1362,6 +1479,21 @@ html, body, #root {
 
 .viewer-anchor.open.active {
   box-shadow: 0 0 0 1px rgba(137, 180, 250, 0.6), 0 0 6px rgba(137, 180, 250, 0.5);
+}
+
+/* Resolved notes get a dimmed green marker */
+.viewer-anchor.resolved {
+  background: var(--fg-muted);
+  opacity: 0.25;
+}
+
+.viewer-anchor.resolved:hover {
+  opacity: 0.5;
+}
+
+.viewer-anchor.resolved.active {
+  opacity: 0.6;
+  box-shadow: 0 0 0 1px rgba(108, 112, 134, 0.5), 0 0 4px rgba(108, 112, 134, 0.3);
 }
 
 /* ---- Markdown tables (constrain wide tables to the chat width) ---- */

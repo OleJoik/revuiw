@@ -9,6 +9,7 @@ interface Props {
   onSelectFile: (path: string) => void;
   focused: boolean;
   onFocus: () => void;
+  filesWithNotes?: Set<string>;
 }
 
 // Flatten visible tree nodes for keyboard navigation
@@ -27,7 +28,7 @@ function flattenVisible(node: TreeNode, expanded: Set<string>, isRoot: boolean, 
   return result;
 }
 
-export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Props) {
+export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus, filesWithNotes }: Props) {
   const [width, setWidth] = useSetting("sidebar:width", 300);
   const [roots, setRoots] = useState<RootEntry[]>([]);
   const [currentRoot, setCurrentRoot] = useSetting<string | null>("currentRoot", null);
@@ -397,6 +398,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
             search={search.toLowerCase()}
             cursor={cursor}
             onCursor={(path) => { setCursor(path); setTreeActive(true); searchRef.current?.blur(); }}
+            filesWithNotes={filesWithNotes}
             isRoot
           />
         ) : (
@@ -411,7 +413,7 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
 }
 
 function TreeView({
-  node, depth, expanded, onToggle, onSelect, search, cursor, onCursor, isRoot,
+  node, depth, expanded, onToggle, onSelect, search, cursor, onCursor, filesWithNotes, isRoot,
 }: {
   node: TreeNode;
   depth: number;
@@ -421,12 +423,17 @@ function TreeView({
   search: string;
   cursor: string | null;
   onCursor: (path: string) => void;
+  filesWithNotes?: Set<string>;
   isRoot?: boolean;
 }) {
   const isDir = node.type === "directory";
   const isOpen = expanded.has(node.path);
   const matches = search ? matchesSearch(node, search) : true;
   const isCursor = cursor === node.path;
+  const hasNote = !isDir && filesWithNotes?.has(node.path);
+
+  // For directories, check if any descendant has notes
+  const dirHasNotes = isDir && filesWithNotes && hasDescendantWithNotes(node, filesWithNotes);
 
   if (search && !matches) return null;
 
@@ -434,7 +441,7 @@ function TreeView({
     <>
       {!isRoot && (
         <div
-          className={`tree-node ${isDir ? "dir" : "file"} ${isCursor ? "cursor" : ""}`}
+          className={`tree-node ${isDir ? "dir" : "file"} ${isCursor ? "cursor" : ""} ${hasNote ? "has-note" : ""} ${dirHasNotes ? "dir-has-notes" : ""}`}
           style={{ paddingLeft: depth * 14 + 6 }}
           data-path={node.path}
           onClick={() => { onCursor(node.path); isDir ? onToggle(node.path) : onSelect(node.path); }}
@@ -443,6 +450,8 @@ function TreeView({
             {isDir ? "\u25B8" : ""}
           </span>
           <span className="tree-label">{node.name}</span>
+          {hasNote && <span className="tree-note-indicator" title="Has unresolved notes">\u25CF</span>}
+          {dirHasNotes && !hasNote && <span className="tree-note-indicator dir" title="Contains files with unresolved notes">\u25CF</span>}
         </div>
       )}
       {isDir && (isOpen || isRoot) && node.children?.map(child => (
@@ -456,10 +465,17 @@ function TreeView({
           search={search}
           cursor={cursor}
           onCursor={onCursor}
+          filesWithNotes={filesWithNotes}
         />
       ))}
     </>
   );
+}
+
+function hasDescendantWithNotes(node: TreeNode, filesWithNotes: Set<string>): boolean {
+  if (node.type === "file") return filesWithNotes.has(node.path);
+  if (node.children) return node.children.some(c => hasDescendantWithNotes(c, filesWithNotes));
+  return false;
 }
 
 function matchesSearch(node: TreeNode, query: string): boolean {
