@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useSetting } from "../hooks";
 import type { RootEntry, TreeNode } from "../types";
 
@@ -43,7 +44,6 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
   const dragging = useRef(false);
   const treeRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const rootPickerRef = useRef<HTMLDivElement>(null);
 
   // Flatten visible nodes for keyboard cursor movement
   const visibleNodes = useMemo(() => {
@@ -225,18 +225,6 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
     el?.scrollIntoView({ block: "nearest" });
   }, [cursor]);
 
-  // Close root picker on outside click
-  useEffect(() => {
-    if (!showRootPicker) return;
-    const handleClick = (e: MouseEvent) => {
-      if (rootPickerRef.current && !rootPickerRef.current.contains(e.target as Node)) {
-        setShowRootPicker(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [showRootPicker]);
-
   const addRoot = (path: string) => {
     if (!path.trim()) return;
     fetch("/api/roots", {
@@ -324,62 +312,65 @@ export function Sidebar({ open, onToggle, onSelectFile, focused, onFocus }: Prop
           {activeRoot ? activeRoot.label : "No folder"}
           {activeRoot?.branch && <span className="sidebar-root-branch">{activeRoot.branch}</span>}
         </span>
-        {roots.length > 1 && (
-          <button
-            className="sidebar-root-switch"
-            onClick={() => setShowRootPicker(!showRootPicker)}
-            title="Switch folder"
-          >&#8645;</button>
-        )}
         <button
           className="sidebar-root-add"
-          onClick={() => setShowRootPicker(!showRootPicker)}
-          title="Add folder"
+          onClick={() => { setShowRootPicker(true); if (!browsePath) browseTo("/"); }}
+          title="Open folder"
         >+</button>
         <button className="sidebar-close" onClick={onToggle} title="Close sidebar">&times;</button>
       </div>
-      {showRootPicker && (
-        <div className="sidebar-root-picker" ref={rootPickerRef}>
-          {roots.map(r => (
-            <div
-              key={r.path}
-              className={`sidebar-root-item ${r.path === currentRoot ? "active" : ""}`}
-              onClick={() => { setCurrentRoot(r.path); setShowRootPicker(false); setBrowsePath(null); }}
-            >
-              <span className="sidebar-root-item-label">{r.label}{r.branch ? ` [${r.branch}]` : ""}</span>
-              {roots.length > 1 && (
-                <button
-                  className="sidebar-root-item-remove"
-                  onClick={(e) => { e.stopPropagation(); removeRoot(r.path); }}
-                  title="Remove"
-                >&times;</button>
-              )}
+      {showRootPicker && createPortal(
+        <div className="root-modal-backdrop" onMouseDown={() => { setShowRootPicker(false); setBrowsePath(null); }}>
+          <div className="root-modal" onMouseDown={e => e.stopPropagation()}>
+            <div className="root-modal-header">
+              <span className="root-modal-title">Open Folder</span>
+              <button className="root-modal-close" onClick={() => { setShowRootPicker(false); setBrowsePath(null); }}>&times;</button>
             </div>
-          ))}
-          {!browsePath ? (
-            <button className="sidebar-browse-btn" onClick={() => browseTo("/")}>
-              Browse folders...
-            </button>
-          ) : (
-            <div className="sidebar-browse">
-              <div className="sidebar-browse-header">
-                {browseParent && (
-                  <button className="sidebar-browse-up" onClick={() => browseTo(browseParent)}>&larr;</button>
-                )}
-                <span className="sidebar-browse-path" title={browsePath}>{browsePath}</span>
-                <button className="sidebar-browse-select" onClick={() => addRoot(browsePath)}>Select</button>
-              </div>
-              <div className="sidebar-browse-list">
-                {browseDirs.map(d => (
-                  <div key={d.path} className="sidebar-browse-dir" onClick={() => browseTo(d.path)}>
-                    {d.name}
+            {roots.length > 0 && (
+              <div className="root-modal-section">
+                <div className="root-modal-section-label">Recent</div>
+                {roots.map(r => (
+                  <div
+                    key={r.path}
+                    className={`root-modal-item ${r.path === currentRoot ? "active" : ""}`}
+                    onClick={() => { setCurrentRoot(r.path); setShowRootPicker(false); setBrowsePath(null); }}
+                  >
+                    <span className="root-modal-item-label">{r.label}{r.branch ? ` [${r.branch}]` : ""}</span>
+                    <span className="root-modal-item-path">{r.path}</span>
+                    {roots.length > 1 && (
+                      <button
+                        className="root-modal-item-remove"
+                        onClick={(e) => { e.stopPropagation(); removeRoot(r.path); }}
+                        title="Remove"
+                      >&times;</button>
+                    )}
                   </div>
                 ))}
-                {browseDirs.length === 0 && <div className="sidebar-browse-empty">No subdirectories</div>}
+              </div>
+            )}
+            <div className="root-modal-section">
+              <div className="root-modal-section-label">Browse</div>
+              <div className="root-modal-browse">
+                <div className="root-modal-browse-header">
+                  {browseParent && (
+                    <button className="sidebar-browse-up" onClick={() => browseTo(browseParent)}>&larr;</button>
+                  )}
+                  <span className="sidebar-browse-path" title={browsePath || undefined}>{browsePath || "/"}</span>
+                  <button className="sidebar-browse-select" onClick={() => browsePath && addRoot(browsePath)}>Open</button>
+                </div>
+                <div className="root-modal-browse-list">
+                  {browseDirs.map(d => (
+                    <div key={d.path} className="sidebar-browse-dir" onClick={() => browseTo(d.path)}>
+                      {d.name}
+                    </div>
+                  ))}
+                  {browseDirs.length === 0 && <div className="sidebar-browse-empty">No subdirectories</div>}
+                </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        </div>,
+        document.body,
       )}
       <div className="sidebar-search">
         <input
