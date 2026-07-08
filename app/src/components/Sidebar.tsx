@@ -450,8 +450,8 @@ function TreeView({
             {isDir ? "\u25B8" : ""}
           </span>
           <span className="tree-label">{node.name}</span>
-          {hasNote && <span className="tree-note-indicator" title="Has unresolved notes">\u25CF</span>}
-          {dirHasNotes && !hasNote && <span className="tree-note-indicator dir" title="Contains files with unresolved notes">\u25CF</span>}
+          {hasNote && <span className="tree-note-indicator" title="Has unresolved notes">{"\u25CF"}</span>}
+          {dirHasNotes && !hasNote && <span className="tree-note-indicator dir" title="Contains files with unresolved notes">{"\u25CF"}</span>}
         </div>
       )}
       {isDir && (isOpen || isRoot) && node.children?.map(child => (

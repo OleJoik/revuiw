@@ -3,6 +3,11 @@ import { layout, prepare } from "@chenglou/pretext";
 import { useSetting } from "../hooks";
 import type { SelectionContext } from "../opencode";
 
+export interface Placement {
+  x: number;
+  y: number;
+}
+
 interface Anchor {
   id: string;
   startLine: number;
@@ -17,9 +22,9 @@ interface Props {
   focused: boolean;
   onFocus: () => void;
   onSendToChat: (ctx: SelectionContext) => void;
-  onCreateNote: (ctx: SelectionContext) => void;
+  onCreateNote: (ctx: SelectionContext, placement?: Placement) => void;
   anchors?: Anchor[];
-  onAnchorClick?: (id: string) => void;
+  onAnchorClick?: (id: string, placement?: Placement) => void;
 }
 
 type Token = { content: string; color?: string };
@@ -33,6 +38,9 @@ const CODE_PAD_LEFT = LINE_NUMBER_WIDTH;
 const CODE_PAD_RIGHT = 16;
 const TAB_SIZE = 2;
 const OVERSCAN_PX = 600;
+const POPOVER_WIDTH = 400;
+const POPOVER_ESTIMATED_HEIGHT = 300;
+const POPOVER_GAP = 8;
 const SCROLL_OFF_OPTIONS = [0, 3, 5, 8, 12];
 const ANCHOR_LANE_STEP = 7; // px between overlapping gutter markers
 const MAX_ANCHOR_LANES = 3; // cap so lanes never march into the line numbers
@@ -282,6 +290,25 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
     };
   }, [filePath, loading]);
 
+  const placementForRange = useCallback((start: number, end: number): Placement | undefined => {
+    const body = bodyRef.current;
+    const startMetric = metrics[start];
+    const endMetric = metrics[end] ?? startMetric;
+    if (!body || !startMetric || !endMetric) return undefined;
+
+    const rect = body.getBoundingClientRect();
+    const selectionBottom = rect.top + endMetric.top + endMetric.height - body.scrollTop;
+    const selectionTop = rect.top + startMetric.top - body.scrollTop;
+    const x = clamp(rect.left + CODE_PAD_LEFT - body.scrollLeft, 12, window.innerWidth - POPOVER_WIDTH - 12);
+    const below = selectionBottom + POPOVER_GAP;
+    const above = selectionTop - POPOVER_GAP - POPOVER_ESTIMATED_HEIGHT;
+    const y = below + POPOVER_ESTIMATED_HEIGHT <= window.innerHeight - 12
+      ? below
+      : clamp(above, 12, window.innerHeight - POPOVER_ESTIMATED_HEIGHT - 12);
+
+    return { x, y };
+  }, [metrics]);
+
   const cursorAnchors = useMemo(() => {
     const line = cursorLine + 1;
     return anchors
@@ -378,7 +405,10 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
       if (activeCursorAnchor && e.key === "Enter") {
         e.preventDefault();
         countRef.current = "";
-        onAnchorClick?.(activeCursorAnchor.id);
+        onAnchorClick?.(
+          activeCursorAnchor.id,
+          placementForRange(activeCursorAnchor.startLine - 1, activeCursorAnchor.endLine - 1),
+        );
         return;
       }
 
@@ -464,7 +494,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
           };
           // c -> attach to main chat (flow A); C -> create a note (flow B)
           if (e.key === "c") onSendToChat(sel);
-          else onCreateNote(sel);
+          else onCreateNote(sel, placementForRange(start, end));
           setVisualAnchor(null);
           break;
         }
@@ -473,7 +503,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onCreateNote, activeCursorAnchor, cursorAnchors, onAnchorClick]);
+  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onCreateNote, placementForRange, activeCursorAnchor, cursorAnchors, onAnchorClick]);
 
   useEffect(() => {
     if (!filePath) {
@@ -621,7 +651,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
                     onMouseDown={e => {
                       e.stopPropagation();
                       e.preventDefault();
-                      onAnchorClick?.(a.id);
+                      onAnchorClick?.(a.id, placementForRange(a.startLine - 1, a.endLine - 1));
                     }}
                   />
                 </React.Fragment>

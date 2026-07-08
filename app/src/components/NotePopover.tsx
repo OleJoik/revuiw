@@ -1,19 +1,21 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { updateNote, deleteNote, noteLabel, type Note } from "../notes";
+import type { Placement } from "./Viewer";
 
 interface Props {
   note: Note;
+  placement?: Placement;
   onClose: () => void;
   onRemove: () => void;
   onUpdated: (note: Note) => void;
   onDiscuss: (note: Note) => void;
 }
 
-export function NotePopover({ note, onClose, onRemove, onUpdated, onDiscuss }: Props) {
+export function NotePopover({ note, placement, onClose, onRemove, onUpdated, onDiscuss }: Props) {
   const [body, setBody] = useState(note.body);
   const [saving, setSaving] = useState(false);
   const [showSnippet, setShowSnippet] = useState(false);
-  const [pos, setPos] = useState(() => ({ x: Math.max(60, window.innerWidth - 460), y: 90 }));
+  const [pos, setPos] = useState(() => placement || { x: Math.max(60, window.innerWidth - 460), y: 90 });
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -23,6 +25,9 @@ export function NotePopover({ note, onClose, onRemove, onUpdated, onDiscuss }: P
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => { setBody(note.body); }, [note.body]);
   useEffect(() => { textareaRef.current?.focus(); }, []);
+  useEffect(() => {
+    if (placement && !dragOffset.current) setPos(placement);
+  }, [placement]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -114,7 +119,7 @@ export function NotePopover({ note, onClose, onRemove, onUpdated, onDiscuss }: P
       {/* Original snippet (collapsible) */}
       <div className="note-snippet-section">
         <button className="note-snippet-toggle" onClick={() => setShowSnippet(!showSnippet)}>
-          {showSnippet ? "\u25BE" : "\u25B8"} Original snippet (lines {note.startLine}\u2013{note.endLine})
+          {showSnippet ? "\u25BE" : "\u25B8"} Original snippet (lines {note.startLine}{"\u2013"}{note.endLine})
         </button>
         {showSnippet && (
           <pre className="note-snippet-code">{note.originalSnippet}</pre>

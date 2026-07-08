@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./components/Sidebar";
-import { Viewer } from "./components/Viewer";
+import { Viewer, type Placement } from "./components/Viewer";
 import { OpenCodePanel } from "./components/OpenCodePanel";
 import { NotePopover } from "./components/NotePopover";
 import { useSetting } from "./hooks";
@@ -17,6 +17,7 @@ export function App() {
   // Notes state
   const [notes, setNotes] = useState<Note[]>([]);
   const [openNoteIds, setOpenNoteIds] = useState<string[]>([]);
+  const [notePlacements, setNotePlacements] = useState<Map<string, Placement>>(new Map());
 
   // Selection -> chat wiring (flow A: main panel).
   const [pendingSelection, setPendingSelection] = useState<SelectionContext | null>(null);
@@ -39,7 +40,7 @@ export function App() {
   }, [openChat]);
 
   // Create a new note from a code selection (flow B: press C)
-  const createNoteFromSelection = useCallback(async (ctx: SelectionContext) => {
+  const createNoteFromSelection = useCallback(async (ctx: SelectionContext, placement?: Placement) => {
     const lines = ctx.text.split("\n");
     const anchorLine = ctx.startLine;
     const anchorText = lines[0] || "";
@@ -56,6 +57,9 @@ export function App() {
     if (note) {
       setNotes(prev => [...prev, note]);
       setOpenNoteIds(prev => [...prev, note.id]);
+      if (placement) {
+        setNotePlacements(prev => new Map(prev).set(note.id, placement));
+      }
     }
   }, []);
 
@@ -63,10 +67,12 @@ export function App() {
     setOpenNoteIds(prev => prev.filter(x => x !== id));
   }, []);
 
-  const toggleNote = useCallback((id: string) => {
-    setOpenNoteIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+  const toggleNote = useCallback((id: string, placement?: Placement) => {
+    setOpenNoteIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (placement) setNotePlacements(p => new Map(p).set(id, placement));
+      return [...prev, id];
+    });
   }, []);
 
   const removeNote = useCallback((id: string) => {
@@ -202,6 +208,7 @@ export function App() {
         <NotePopover
           key={n.id}
           note={n}
+          placement={notePlacements.get(n.id)}
           onClose={() => closeNote(n.id)}
           onRemove={() => removeNote(n.id)}
           onUpdated={handleNoteUpdated}
