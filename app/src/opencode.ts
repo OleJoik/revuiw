@@ -72,8 +72,8 @@ export function resolveDefaultModel(cfg: OpenCodeConfig): string | null {
 }
 
 export interface AgentInfo {
-  name: string;
-  model?: { modelID: string; providerID: string };
+  id: string;
+  model?: { id: string; providerID: string; variant?: string };
 }
 
 export async function listAgents(): Promise<AgentInfo[]> {

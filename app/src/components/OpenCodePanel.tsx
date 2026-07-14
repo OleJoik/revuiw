@@ -84,9 +84,9 @@ export function OpenCodePanel({
   // Resolve default model from the active agent
   useEffect(() => {
     if (agents.length === 0) return;
-    const activeAgent = agents.find(a => a.name === agent) || agents.find(a => a.name === "plan") || agents[0];
-    if (activeAgent?.model?.modelID) {
-      setDefaultModel(activeAgent.model.modelID);
+    const activeAgent = agents.find(a => a.id === agent) || agents.find(a => a.id === "plan") || agents[0];
+    if (activeAgent?.model?.id) {
+      setDefaultModel(activeAgent.model.id);
     }
   }, [agents, agent]);
 
