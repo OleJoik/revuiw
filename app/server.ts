@@ -753,7 +753,7 @@ Bun.serve({
       }
 
       if (pathname === "/api/opencode/models" && req.method === "GET") {
-        const { data, error } = await opencode.model.list();
+        const { data, error } = await opencode.v2.model.list();
         if (error) return new Response(JSON.stringify({ error: "Failed to list models" }), { status: 502, headers: { "Content-Type": "application/json" } });
         return new Response(JSON.stringify(data), {
           headers: { "Content-Type": "application/json" },
@@ -764,7 +764,7 @@ Bun.serve({
       if (sessionModelMatch && req.method === "PUT") {
         const sessionId = sessionModelMatch[1];
         const body = await req.json();
-        const { data, error } = await opencode.session.switchModel({ sessionID: sessionId, model: body.model });
+        const { data, error } = await opencode.v2.session.switchModel({ sessionID: sessionId, model: body.model });
         if (error) return new Response(JSON.stringify({ error: "Failed to switch model" }), { status: 502, headers: { "Content-Type": "application/json" } });
         return new Response(JSON.stringify(data ?? { ok: true }), {
           headers: { "Content-Type": "application/json" },
