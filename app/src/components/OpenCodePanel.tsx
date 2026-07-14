@@ -34,6 +34,7 @@ export function OpenCodePanel({
   const [showSessions, setShowSessions] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [verbose, setVerbose] = useSetting("oc:verbose", false);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragging = useRef(false);
@@ -251,22 +252,34 @@ export function OpenCodePanel({
           {messages.length === 0 && <div className="oc-empty">Send a message to start</div>}
           {messages.map((msg, i) => {
             const role = msg.info?.role || "unknown";
-            const text = (msg.parts || [])
-              .filter(p => p.type === "text")
-              .map(p => p.text)
-              .join("");
-            if (!text.trim()) return null;
+            const parts = msg.parts || [];
+            const textParts = parts.filter(p => p.type === "text").map(p => p.text).join("");
+            const reasoningParts = verbose ? parts.filter(p => p.type === "reasoning").map(p => p.text).join("") : "";
+            const toolParts = verbose ? parts.filter(p => p.type === "tool") : [];
+            if (!textParts.trim() && !reasoningParts.trim() && toolParts.length === 0) return null;
             const isAssistant = role === "assistant";
             return (
               <div key={i} className={`oc-msg ${role}`}>
-                {isAssistant ? (
+                {reasoningParts.trim() && (
+                  <details className="oc-reasoning">
+                    <summary>Thinking</summary>
+                    <div className="oc-reasoning-text">{reasoningParts.trim()}</div>
+                  </details>
+                )}
+                {toolParts.map((tp, j) => (
+                  <details key={j} className="oc-tool-call">
+                    <summary>{tp.state?.title || tp.tool || tp.toolName || "tool"}{tp.state?.status ? ` (${tp.state.status})` : ""}</summary>
+                    {tp.state?.output && <pre className="oc-tool-output">{tp.state.output.slice(0, 500)}</pre>}
+                  </details>
+                ))}
+                {textParts.trim() && (isAssistant ? (
                   <div
                     className="oc-markdown"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(text.trim()) }}
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(textParts.trim()) }}
                   />
                 ) : (
-                  text.trim()
-                )}
+                  textParts.trim()
+                ))}
               </div>
             );
           })}
@@ -287,6 +300,11 @@ export function OpenCodePanel({
             <button className={agent === "plan" ? "active" : ""} onClick={() => setAgent("plan")}>Plan</button>
             <button className={agent === "build" ? "active" : ""} onClick={() => setAgent("build")}>Do</button>
           </div>
+          <button
+            className={`oc-verbose-toggle ${verbose ? "active" : ""}`}
+            onClick={() => setVerbose(!verbose)}
+            title={verbose ? "Hide thinking & tools" : "Show thinking & tools"}
+          >{verbose ? "V" : "v"}</button>
           <input
             ref={inputRef}
             type="text"

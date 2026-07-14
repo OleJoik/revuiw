@@ -1333,6 +1333,68 @@ html, body, #root {
   color: var(--bg);
 }
 
+.oc-verbose-toggle {
+  background: none;
+  border: 1px solid var(--border, #333);
+  border-radius: 3px;
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 5px;
+  line-height: 1;
+}
+
+.oc-verbose-toggle.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.oc-reasoning {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+}
+
+.oc-reasoning summary {
+  cursor: pointer;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.oc-reasoning-text {
+  white-space: pre-wrap;
+  padding: 4px 8px;
+  margin-top: 4px;
+  border-left: 2px solid var(--border, #333);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.oc-tool-call {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+}
+
+.oc-tool-call summary {
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.oc-tool-output {
+  font-size: 0.7rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 4px 8px;
+  margin: 4px 0;
+  background: var(--bg, #111);
+  border-radius: 3px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
 .oc-model-badge {
   font-size: 0.7rem;
   color: var(--fg-dim, #888);

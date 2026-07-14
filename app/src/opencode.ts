@@ -22,6 +22,8 @@ export interface MessagePart {
   type: string;
   text?: string;
   toolName?: string;
+  tool?: string;
+  state?: { status?: string; input?: Record<string, unknown>; output?: string; title?: string };
 }
 
 export interface Message {
