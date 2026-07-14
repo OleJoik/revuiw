@@ -432,7 +432,10 @@ async function scanGitRepos(parentPath: string): Promise<string[]> {
 
 Bun.serve({
   port: 3000,
-  development: process.env.NODE_ENV === "development",
+  // HMR is disabled: the workspace being reviewed is often the app's own source,
+  // and hot-reloading would reload the browser mid-review whenever the agent
+  // edits a served asset (style.css / index.html), dropping in-flight requests.
+  development: { hmr: false, console: process.env.NODE_ENV === "development" },
   routes: {
     "/": homepage,
   },
