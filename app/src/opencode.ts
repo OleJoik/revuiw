@@ -11,6 +11,11 @@ export interface Session {
   parentID?: string;
   createdAt?: string;
   updatedAt?: string;
+  model?: {
+    id: string;
+    providerID: string;
+    variant?: string;
+  };
 }
 
 export interface MessagePart {

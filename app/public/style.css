@@ -1260,6 +1260,20 @@ html, body, #root {
   color: var(--bg);
 }
 
+.oc-model-badge {
+  font-size: 0.7rem;
+  color: var(--fg-dim, #888);
+  background: var(--bg-alt, #1e1e1e);
+  border: 1px solid var(--border, #333);
+  border-radius: 3px;
+  padding: 2px 6px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
 /* ---- Selection chat popover (flow B) ---- */
 
 /* ---- Note Popover (replaces sel-chat) ---- */

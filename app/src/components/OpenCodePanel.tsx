@@ -139,6 +139,12 @@ export function OpenCodePanel({
     try {
       const reply = await sendPrompt({ sessionId: session.id, message: text, agent, context });
       setMessages(prev => [...prev, reply]);
+      // Refresh sessions to pick up model info after first prompt
+      listSessions().then(list => {
+        setSessions(list);
+        const updated = list.find(s => s.id === session.id);
+        if (updated) setCurrentSession(updated);
+      }).catch(() => {});
     } catch (err: any) {
       setMessages(prev => [...prev, { info: { role: "error" }, parts: [{ type: "text", text: err.message }] }]);
     }
@@ -224,6 +230,11 @@ export function OpenCodePanel({
             <button className={agent === "plan" ? "active" : ""} onClick={() => setAgent("plan")}>Plan</button>
             <button className={agent === "build" ? "active" : ""} onClick={() => setAgent("build")}>Do</button>
           </div>
+          {currentSession?.model && (
+            <span className="oc-model-badge" title={`${currentSession.model.providerID}/${currentSession.model.id}${currentSession.model.variant ? ` (${currentSession.model.variant})` : ""}`}>
+              {currentSession.model.id}
+            </span>
+          )}
           <input
             ref={inputRef}
             type="text"
