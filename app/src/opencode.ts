@@ -71,6 +71,19 @@ export function resolveDefaultModel(cfg: OpenCodeConfig): string | null {
     || null;
 }
 
+export interface AgentInfo {
+  name: string;
+  model?: { modelID: string; providerID: string };
+}
+
+export async function listAgents(): Promise<AgentInfo[]> {
+  const res = await fetch(`${BASE}/agents`);
+  if (!res.ok) return [];
+  const body = await res.json();
+  const arr = Array.isArray(body) ? body : (body.data ?? []);
+  return arr;
+}
+
 export async function createSession(title?: string): Promise<Session | null> {
   const res = await fetch(`${BASE}/sessions`, {
     method: "POST",

@@ -3,8 +3,8 @@ import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
   listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
-  listModels, switchModel,
-  type Session, type Message, type Agent, type SelectionContext, type ModelInfo,
+  listModels, switchModel, listAgents,
+  type Session, type Message, type Agent, type SelectionContext, type ModelInfo, type AgentInfo,
 } from "../opencode";
 
 interface Props {
@@ -35,6 +35,7 @@ export function OpenCodePanel({
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [verbose, setVerbose] = useSetting("oc:verbose", false);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,15 +73,22 @@ export function OpenCodePanel({
     setMessages(msgs);
   }, []);
 
-  // Load sessions and default model when opened
+  // Load sessions, models, and agents when opened
   useEffect(() => {
     if (!open) return;
     listSessions().then(setSessions).catch(() => setSessions([]));
-    listModels().then(list => {
-      setModels(list);
-      if (list.length > 0 && !defaultModel) setDefaultModel(list[0].id);
-    }).catch(() => {});
+    listModels().then(setModels).catch(() => {});
+    listAgents().then(setAgents).catch(() => {});
   }, [open]);
+
+  // Resolve default model from the active agent
+  useEffect(() => {
+    if (agents.length === 0) return;
+    const activeAgent = agents.find(a => a.name === agent) || agents.find(a => a.name === "plan") || agents[0];
+    if (activeAgent?.model?.modelID) {
+      setDefaultModel(activeAgent.model.modelID);
+    }
+  }, [agents, agent]);
 
   // Report the active main-session id upward so popovers know what to fork
   useEffect(() => {

@@ -691,6 +691,15 @@ Bun.serve({
         });
       }
 
+      if (pathname === "/api/opencode/agents" && req.method === "GET") {
+        const res = await fetch(`${OPENCODE_URL}/api/agent`);
+        if (!res.ok) return new Response(JSON.stringify({ error: "Failed to list agents" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        const data = await res.json();
+        return new Response(JSON.stringify(data), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       if (pathname === "/api/opencode/sessions" && req.method === "GET") {
         const { data, error } = await opencode.session.list();
         if (error) return new Response(JSON.stringify({ error: "Failed to list sessions" }), { status: 502, headers: { "Content-Type": "application/json" } });
