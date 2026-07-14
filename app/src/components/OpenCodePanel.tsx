@@ -3,7 +3,7 @@ import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
   listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
-  listModels, switchModel, getConfig, resolveDefaultModel,
+  listModels, switchModel,
   type Session, type Message, type Agent, type SelectionContext, type ModelInfo,
 } from "../opencode";
 
@@ -76,9 +76,9 @@ export function OpenCodePanel({
   useEffect(() => {
     if (!open) return;
     listSessions().then(setSessions).catch(() => setSessions([]));
-    getConfig().then(cfg => {
-      const m = resolveDefaultModel(cfg);
-      if (m) setDefaultModel(m);
+    listModels().then(list => {
+      setModels(list);
+      if (list.length > 0 && !defaultModel) setDefaultModel(list[0].id);
     }).catch(() => {});
   }, [open]);
 
