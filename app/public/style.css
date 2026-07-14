@@ -1347,6 +1347,58 @@ html, body, #root {
   cursor: default;
 }
 
+.oc-model-badge.clickable {
+  cursor: pointer;
+}
+
+.oc-model-badge.clickable:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.oc-model-picker {
+  border-bottom: 1px solid var(--border);
+  max-height: 200px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+.oc-model-item {
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--fg);
+  transition: background 0.1s;
+}
+
+.oc-model-item:hover {
+  background: var(--bg-hover);
+}
+
+.oc-model-item.active {
+  background: var(--bg-active);
+  color: var(--accent);
+}
+
+.oc-model-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.oc-model-item-provider {
+  font-size: 9px;
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+
 /* ---- Selection chat popover (flow B) ---- */
 
 /* ---- Note Popover (replaces sel-chat) ---- */

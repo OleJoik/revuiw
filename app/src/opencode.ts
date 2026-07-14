@@ -63,6 +63,30 @@ export async function deleteSession(id: string): Promise<boolean> {
   return res.ok;
 }
 
+export interface ModelInfo {
+  id: string;
+  providerID: string;
+  name: string;
+}
+
+export async function listModels(): Promise<ModelInfo[]> {
+  const res = await fetch(`${BASE}/models`);
+  if (!res.ok) return [];
+  const body = await res.json();
+  // Response is { data: [...] } or a plain array depending on passthrough
+  const arr = Array.isArray(body) ? body : (body.data ?? []);
+  return arr.map((m: any) => ({ id: m.id, providerID: m.providerID, name: m.name || m.id }));
+}
+
+export async function switchModel(sessionId: string, model: { id: string; providerID: string }): Promise<boolean> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/model`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model }),
+  });
+  return res.ok;
+}
+
 // Fork an existing session so a tangent inherits the full conversation context
 // while keeping its own history. Optionally fork from a specific message.
 export async function forkSession(id: string, messageID?: string): Promise<Session | null> {

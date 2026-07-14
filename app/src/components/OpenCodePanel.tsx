@@ -3,7 +3,8 @@ import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
   listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
-  type Session, type Message, type Agent, type SelectionContext,
+  listModels, switchModel,
+  type Session, type Message, type Agent, type SelectionContext, type ModelInfo,
 } from "../opencode";
 
 interface Props {
@@ -31,6 +32,8 @@ export function OpenCodePanel({
   const [attached, setAttached] = useState<SelectionContext | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [models, setModels] = useState<ModelInfo[]>([]);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragging = useRef(false);
@@ -169,13 +172,26 @@ export function OpenCodePanel({
     <div className={`oc-panel ${focused ? "panel-focused" : ""}`} style={{ width }} onMouseDown={onFocus}>
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} />
       <div className="oc-header">
-        <span className="oc-header-session" onClick={() => { listSessions().then(setSessions).catch(() => {}); setShowSessions(!showSessions); }} title="Switch session">
+        <span className="oc-header-session" onClick={() => { listSessions().then(setSessions).catch(() => {}); setShowSessions(!showSessions); setShowModelPicker(false); }} title="Switch session">
           <span className={`oc-chevron ${showSessions ? "open" : ""}`}>&#9656;</span>
           {currentSession?.title || "New conversation"}
         </span>
         {currentSession?.model && (
-          <span className="oc-model-badge" title={`${currentSession.model.providerID}/${currentSession.model.id}${currentSession.model.variant ? ` (${currentSession.model.variant})` : ""}`}>
+          <span
+            className="oc-model-badge clickable"
+            title={`${currentSession.model.providerID}/${currentSession.model.id} — click to change`}
+            onClick={() => { listModels().then(setModels).catch(() => {}); setShowModelPicker(!showModelPicker); setShowSessions(false); }}
+          >
             {currentSession.model.id}
+          </span>
+        )}
+        {!currentSession?.model && (
+          <span
+            className="oc-model-badge clickable"
+            title="Select model"
+            onClick={() => { listModels().then(setModels).catch(() => {}); setShowModelPicker(!showModelPicker); setShowSessions(false); }}
+          >
+            model
           </span>
         )}
         <div className="oc-header-actions">
@@ -202,6 +218,32 @@ export function OpenCodePanel({
               </div>
             ))}
           </div>
+        </div>
+      )}
+      {showModelPicker && (
+        <div className="oc-model-picker">
+          {models.length === 0 && <div className="oc-empty">No models available</div>}
+          {models.map(m => (
+            <div
+              key={`${m.providerID}/${m.id}`}
+              className={`oc-model-item ${currentSession?.model?.id === m.id && currentSession?.model?.providerID === m.providerID ? "active" : ""}`}
+              onClick={async () => {
+                let session = currentSession;
+                if (!session) {
+                  session = await createSession("revuiw session");
+                  if (!session) return;
+                  setSessions(prev => [session!, ...prev]);
+                  setCurrentSession(session);
+                }
+                await switchModel(session.id, { id: m.id, providerID: m.providerID });
+                setCurrentSession({ ...session, model: { id: m.id, providerID: m.providerID } });
+                setShowModelPicker(false);
+              }}
+            >
+              <span className="oc-model-item-name">{m.name || m.id}</span>
+              <span className="oc-model-item-provider">{m.providerID}</span>
+            </div>
+          ))}
         </div>
       )}
       <div className="oc-chat">
