@@ -3,7 +3,7 @@ import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
   listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
-  listModels, switchModel, listAgents,
+  listModels, switchModel, listAgents, getConfigProviders,
   type Session, type Message, type Agent, type SelectionContext, type ModelInfo, type AgentInfo,
 } from "../opencode";
 
@@ -35,6 +35,7 @@ export function OpenCodePanel({
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
+  const [agentDefaults, setAgentDefaults] = useState<Record<string, string>>({});
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [verbose, setVerbose] = useSetting("oc:verbose", false);
   const messagesEnd = useRef<HTMLDivElement>(null);
@@ -73,22 +74,27 @@ export function OpenCodePanel({
     setMessages(msgs);
   }, []);
 
-  // Load sessions, models, and agents when opened
+  // Load sessions, models, and agent defaults when opened
   useEffect(() => {
     if (!open) return;
     listSessions().then(setSessions).catch(() => setSessions([]));
     listModels().then(setModels).catch(() => {});
     listAgents().then(setAgents).catch(() => {});
+    getConfigProviders().then(cfg => {
+      if (cfg.default) setAgentDefaults(cfg.default);
+    }).catch(() => {});
   }, [open]);
 
-  // Resolve default model from the active agent
+  // Resolve default model from config/providers defaults map
   useEffect(() => {
-    if (agents.length === 0) return;
-    const activeAgent = agents.find(a => a.id === agent) || agents.find(a => a.id === "plan") || agents[0];
-    if (activeAgent?.model?.id) {
-      setDefaultModel(activeAgent.model.id);
+    const key = agent; // "plan" or "build"
+    const modelStr = agentDefaults[key] || agentDefaults["plan"] || Object.values(agentDefaults)[0];
+    if (modelStr) {
+      // Format is "provider/model" - show just the model part
+      const modelId = modelStr.includes("/") ? modelStr.split("/").slice(1).join("/") : modelStr;
+      setDefaultModel(modelId);
     }
-  }, [agents, agent]);
+  }, [agentDefaults, agent]);
 
   // Report the active main-session id upward so popovers know what to fork
   useEffect(() => {

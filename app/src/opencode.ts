@@ -61,6 +61,11 @@ export async function getConfig(): Promise<OpenCodeConfig> {
   return json(await fetch(`${BASE}/config`), {});
 }
 
+// Returns { providers: [...], default: { "agent-name": "provider/model", ... } }
+export async function getConfigProviders(): Promise<{ providers: unknown[]; default: Record<string, string> }> {
+  return json(await fetch(`${BASE}/config/providers`), { providers: [], default: {} });
+}
+
 // Resolve the effective default model string from config
 export function resolveDefaultModel(cfg: OpenCodeConfig): string | null {
   return cfg.model
