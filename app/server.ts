@@ -4,7 +4,7 @@ import { homedir } from "os";
 import { randomUUID } from "crypto";
 import { createHighlighter, type Highlighter } from "shiki";
 import { createOpencodeClient } from "@opencode-ai/sdk";
-import { createOpencodeClient as createOpencodeClientV2 } from "@opencode-ai/sdk/v2/client";
+import { createOpencodeClient as createOpencodeV2Client } from "@opencode-ai/sdk/v2/client";
 import {
   computeDiffRows, summarize, rebuildIndex, toggleRows,
   type DiffRow,
@@ -92,7 +92,7 @@ await initHighlighter();
 // --- OpenCode SDK client ---
 const OPENCODE_URL = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
 const opencode = createOpencodeClient({ baseUrl: OPENCODE_URL });
-const opencodeV2 = createOpencodeClientV2({ baseUrl: OPENCODE_URL });
+const ocV2 = createOpencodeV2Client({ baseUrl: OPENCODE_URL });
 
 interface SelectionContext {
   path: string;
@@ -755,7 +755,7 @@ Bun.serve({
       }
 
       if (pathname === "/api/opencode/models" && req.method === "GET") {
-        const { data, error } = await opencodeV2.model.list();
+        const { data, error } = await ocV2.v2.model.list();
         if (error) return new Response(JSON.stringify({ error: "Failed to list models" }), { status: 502, headers: { "Content-Type": "application/json" } });
         return new Response(JSON.stringify(data), {
           headers: { "Content-Type": "application/json" },
@@ -766,7 +766,7 @@ Bun.serve({
       if (sessionModelMatch && req.method === "PUT") {
         const sessionId = sessionModelMatch[1];
         const body = await req.json();
-        const { data, error } = await opencodeV2.session.switchModel({ sessionID: sessionId, model: body.model });
+        const { data, error } = await ocV2.v2.session.switchModel({ sessionID: sessionId, model: body.model });
         if (error) return new Response(JSON.stringify({ error: "Failed to switch model" }), { status: 502, headers: { "Content-Type": "application/json" } });
         return new Response(JSON.stringify(data ?? { ok: true }), {
           headers: { "Content-Type": "application/json" },
