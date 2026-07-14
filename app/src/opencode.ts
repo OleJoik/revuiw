@@ -54,10 +54,21 @@ export async function listSessions(): Promise<Session[]> {
 export interface OpenCodeConfig {
   model?: string;
   agent?: Record<string, { model?: string }>;
+  mode?: Record<string, { model?: string }>;
 }
 
 export async function getConfig(): Promise<OpenCodeConfig> {
   return json(await fetch(`${BASE}/config`), {});
+}
+
+// Resolve the effective default model string from config
+export function resolveDefaultModel(cfg: OpenCodeConfig): string | null {
+  return cfg.model
+    || cfg.agent?.plan?.model
+    || cfg.agent?.build?.model
+    || cfg.mode?.plan?.model
+    || cfg.mode?.build?.model
+    || null;
 }
 
 export async function createSession(title?: string): Promise<Session | null> {

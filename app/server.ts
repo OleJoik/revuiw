@@ -683,8 +683,9 @@ Bun.serve({
       // --- OpenCode API endpoints ---
 
       if (pathname === "/api/opencode/config" && req.method === "GET") {
-        const { data, error } = await opencode.config.get();
-        if (error) return new Response(JSON.stringify({ error: "Failed to get config" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        const res = await fetch(`${OPENCODE_URL}/config`);
+        if (!res.ok) return new Response(JSON.stringify({ error: "Failed to get config" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        const data = await res.json();
         return new Response(JSON.stringify(data), {
           headers: { "Content-Type": "application/json" },
         });
