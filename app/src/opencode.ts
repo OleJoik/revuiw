@@ -58,6 +58,11 @@ export async function createSession(title?: string): Promise<Session | null> {
   return json<Session | null>(res, null);
 }
 
+export async function deleteSession(id: string): Promise<boolean> {
+  const res = await fetch(`${BASE}/sessions/${id}`, { method: "DELETE" });
+  return res.ok;
+}
+
 // Fork an existing session so a tangent inherits the full conversation context
 // while keeping its own history. Optionally fork from a specific message.
 export async function forkSession(id: string, messageID?: string): Promise<Session | null> {

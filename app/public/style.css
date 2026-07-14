@@ -845,6 +845,17 @@ html, body, #root {
   text-decoration: underline;
 }
 
+.oc-chevron {
+  display: inline-block;
+  transition: transform 0.15s;
+  margin-right: 4px;
+  font-size: 10px;
+}
+
+.oc-chevron.open {
+  transform: rotate(90deg);
+}
+
 .oc-header-actions {
   display: flex;
   align-items: center;
@@ -922,11 +933,39 @@ html, body, #root {
   font-size: 11px;
   cursor: pointer;
   border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg);
+  transition: background 0.1s;
+}
+
+.oc-session-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg);
-  transition: background 0.1s;
+}
+
+.oc-session-delete {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.oc-session-item:hover .oc-session-delete {
+  display: inline;
+}
+
+.oc-session-delete:hover {
+  color: var(--error, #e55);
 }
 
 .oc-session-item:hover {

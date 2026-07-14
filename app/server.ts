@@ -742,6 +742,16 @@ Bun.serve({
         });
       }
 
+      const sessionDeleteMatch = pathname.match(/^\/api\/opencode\/sessions\/([^/]+)$/);
+      if (sessionDeleteMatch && req.method === "DELETE") {
+        const sessionId = sessionDeleteMatch[1];
+        const { error } = await opencode.session.delete({ sessionID: sessionId });
+        if (error) return new Response(JSON.stringify({ error: "Failed to delete session" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       return new Response("Not found", { status: 404 });
     } catch (err) {
       console.error(err);

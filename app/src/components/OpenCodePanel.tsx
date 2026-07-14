@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
-  listSessions, createSession, getMessages, sendPrompt, selectionLabel,
+  listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
   type Session, type Message, type Agent, type SelectionContext,
 } from "../opencode";
 
@@ -170,8 +170,14 @@ export function OpenCodePanel({
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} />
       <div className="oc-header">
         <span className="oc-header-session" onClick={() => { listSessions().then(setSessions).catch(() => {}); setShowSessions(!showSessions); }} title="Switch session">
+          <span className={`oc-chevron ${showSessions ? "open" : ""}`}>&#9656;</span>
           {currentSession?.title || "New conversation"}
         </span>
+        {currentSession?.model && (
+          <span className="oc-model-badge" title={`${currentSession.model.providerID}/${currentSession.model.id}${currentSession.model.variant ? ` (${currentSession.model.variant})` : ""}`}>
+            {currentSession.model.id}
+          </span>
+        )}
         <div className="oc-header-actions">
           <button className="oc-new-btn" onClick={() => { setCurrentSession(null); setMessages([]); setShowSessions(false); }} title="New session">+</button>
           <button className="oc-close" onClick={onToggle}>&times;</button>
@@ -187,7 +193,12 @@ export function OpenCodePanel({
                 className={`oc-session-item ${currentSession?.id === s.id ? "active" : ""}`}
                 onClick={() => { selectSession(s); setShowSessions(false); }}
               >
-                {s.title || `Session ${s.id.slice(0, 8)}`}
+                <span className="oc-session-title">{s.title || `Session ${s.id.slice(0, 8)}`}</span>
+                <button
+                  className="oc-session-delete"
+                  title="Delete session"
+                  onClick={(e) => { e.stopPropagation(); deleteSession(s.id).then(ok => { if (ok) { setSessions(prev => prev.filter(x => x.id !== s.id)); if (currentSession?.id === s.id) { setCurrentSession(null); setMessages([]); } } }); }}
+                >&times;</button>
               </div>
             ))}
           </div>
@@ -234,11 +245,6 @@ export function OpenCodePanel({
             <button className={agent === "plan" ? "active" : ""} onClick={() => setAgent("plan")}>Plan</button>
             <button className={agent === "build" ? "active" : ""} onClick={() => setAgent("build")}>Do</button>
           </div>
-          {currentSession?.model && (
-            <span className="oc-model-badge" title={`${currentSession.model.providerID}/${currentSession.model.id}${currentSession.model.variant ? ` (${currentSession.model.variant})` : ""}`}>
-              {currentSession.model.id}
-            </span>
-          )}
           <input
             ref={inputRef}
             type="text"
