@@ -1,34 +1,41 @@
-// Pure review-diff engine (no git, no I/O). Kept separate from the server so
-// the core line-diff and approval-folding logic can be unit-tested directly.
+// Pure review/diff engine (no git, no I/O). Kept separate from the server so
+// the core line-diff, row-building and index-reconstruction logic can be
+// unit-tested directly.
 //
-// Model: three content snapshots — HEAD (baseline), reviewed (approved), and
-// working (current). A working line is:
-//   unchanged  — equal to HEAD
-//   reviewed   — differs from HEAD but matches the reviewed snapshot
-//   unreviewed — differs from the reviewed snapshot (needs approval)
+// Model (git-native): three content snapshots —
+//   HEAD    = baseline (last commit)
+//   index   = the staged tree = what has been "reviewed"
+//   working = the current file on disk
+//
+// The review view is the HEAD -> working diff, split into rows. Each changed
+// row is classified against the index:
+//   reviewed   = the change is staged (present in the index)   [green]
+//   unreviewed = the change is only in the working tree         [yellow]
+// "Mark reviewed" == stage those lines; "unmark" == unstage them. The index is
+// reconstructed from the rows and written back with git plumbing by the server.
 
-export type LineStatus = "unchanged" | "reviewed" | "unreviewed";
+export type RowKind = "context" | "add" | "del";
+export type RowReview = "reviewed" | "unreviewed" | null;
 
-export interface ReviewHunk {
-  startLine: number; // 1-indexed inclusive
-  endLine: number;   // 1-indexed inclusive
+export interface DiffRow {
+  kind: RowKind;
+  oldLine: number | null; // 1-indexed line in HEAD (null for pure additions)
+  newLine: number | null; // 1-indexed line in working (null for deletions)
+  content: string;
+  review: RowReview;      // null for context rows
 }
 
-export interface ReviewState {
-  tracked: boolean;
+export interface DiffSummary {
   changed: boolean;
   fullyReviewed: boolean;
-  lineStatus: LineStatus[];
-  hunks: ReviewHunk[];
-  unreviewedLineCount: number;
-  reviewedLineCount: number;
+  reviewedRows: number;
+  unreviewedRows: number;
 }
 
 export interface Seg { type: "equal" | "change"; a: string[]; b: string[] }
 
 // Split file content into logical lines, dropping the single trailing empty
-// entry produced by a terminating newline. Mirrors the Viewer's splitLines so
-// per-line indices line up exactly.
+// entry produced by a terminating newline.
 export function splitContentLines(content: string): string[] {
   const lines = content.split("\n");
   if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
@@ -87,7 +94,6 @@ export function diffSegments(a: string[], b: string[]): Seg[] {
   for (const s of lcsSegments(a.slice(aStart, aEnd), b.slice(bStart, bEnd))) segs.push(s);
   if (suffix.length) segs.push({ type: "equal", a: suffix, b: suffix });
 
-  // Merge adjacent same-type segments, drop empties.
   const out: Seg[] = [];
   for (const s of segs) {
     if (!s.a.length && !s.b.length) continue;
@@ -98,22 +104,25 @@ export function diffSegments(a: string[], b: string[]): Seg[] {
   return out;
 }
 
-function collectChangedB(segs: Seg[], set: Set<number>): void {
+// Indices (0-based) of the B-side / A-side lines that fall in a change segment.
+function changedBIndices(segs: Seg[]): Set<number> {
+  const set = new Set<number>();
   let bi = 0;
   for (const s of segs) {
     if (s.type === "change") for (let k = 0; k < s.b.length; k++) set.add(bi + k);
     bi += s.b.length;
   }
+  return set;
 }
 
-function unreviewedRanges(segs: Seg[]): ReviewHunk[] {
-  const ranges: ReviewHunk[] = [];
-  let bi = 0;
+function changedAIndices(segs: Seg[]): Set<number> {
+  const set = new Set<number>();
+  let ai = 0;
   for (const s of segs) {
-    if (s.type === "change" && s.b.length > 0) ranges.push({ startLine: bi + 1, endLine: bi + s.b.length });
-    bi += s.b.length;
+    if (s.type === "change") for (let k = 0; k < s.a.length; k++) set.add(ai + k);
+    ai += s.a.length;
   }
-  return ranges;
+  return set;
 }
 
 function linesEqual(a: string[], b: string[]): boolean {
@@ -122,72 +131,83 @@ function linesEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-// Compute the full review overlay for a file from raw content snapshots.
-// `head` is null when the file is untracked (no HEAD version).
-export function computeReviewFromContent(head: string | null, reviewedContent: string, workingContent: string): ReviewState {
-  const W = splitContentLines(workingContent);
-  const H = splitContentLines(head ?? "");
-  const R = splitContentLines(reviewedContent);
+// Build the HEAD -> working diff as a row list, classifying each changed row
+// reviewed/unreviewed via the index. `head`/`index` are null when there is no
+// such tree (untracked file); callers pass "" to mean "empty tree".
+export function computeDiffRows(head: string | null, index: string | null, working: string): DiffRow[] {
+  // An absent tree (null) or the empty string means "no lines". This differs
+  // from splitContentLines(""), which yields a single blank line (a file that
+  // genuinely contains one empty line).
+  const H = head ? splitContentLines(head) : [];
+  const I = index ? splitContentLines(index) : [];
+  const W = working ? splitContentLines(working) : [];
 
-  const unreviewed = new Set<number>();
-  const changed = new Set<number>();
-  const segsRW = diffSegments(R, W);
-  collectChangedB(segsRW, unreviewed);
-  collectChangedB(diffSegments(H, W), changed);
+  // Working lines that differ from the index are unstaged (unreviewed adds).
+  const unstagedW = changedBIndices(diffSegments(I, W));
+  // HEAD lines absent/changed in the index are staged removals (reviewed dels).
+  const stagedDelH = changedAIndices(diffSegments(H, I));
 
-  const lineStatus: LineStatus[] = W.map((_, i) =>
-    unreviewed.has(i) ? "unreviewed" : (changed.has(i) ? "reviewed" : "unchanged"),
-  );
+  const rows: DiffRow[] = [];
+  let hi = 0, wi = 0; // 0-based line cursors into HEAD / working
+  for (const s of diffSegments(H, W)) {
+    if (s.type === "equal") {
+      for (let k = 0; k < s.b.length; k++) {
+        rows.push({ kind: "context", oldLine: hi + 1, newLine: wi + 1, content: s.b[k], review: null });
+        hi++; wi++;
+      }
+      continue;
+    }
+    for (let k = 0; k < s.a.length; k++) {
+      rows.push({ kind: "del", oldLine: hi + 1, newLine: null, content: s.a[k], review: stagedDelH.has(hi) ? "reviewed" : "unreviewed" });
+      hi++;
+    }
+    for (let k = 0; k < s.b.length; k++) {
+      rows.push({ kind: "add", oldLine: null, newLine: wi + 1, content: s.b[k], review: unstagedW.has(wi) ? "unreviewed" : "reviewed" });
+      wi++;
+    }
+  }
+  return rows;
+}
 
-  let reviewedLineCount = 0;
-  for (const i of changed) if (!unreviewed.has(i)) reviewedLineCount++;
-
+export function summarize(rows: DiffRow[]): DiffSummary {
+  let reviewedRows = 0, unreviewedRows = 0;
+  for (const r of rows) {
+    if (r.review === "reviewed") reviewedRows++;
+    else if (r.review === "unreviewed") unreviewedRows++;
+  }
   return {
-    tracked: head !== null,
-    changed: !linesEqual(H, W),
-    fullyReviewed: unreviewed.size === 0,
-    lineStatus,
-    hunks: unreviewedRanges(segsRW),
-    unreviewedLineCount: unreviewed.size,
-    reviewedLineCount,
+    changed: reviewedRows + unreviewedRows > 0,
+    fullyReviewed: unreviewedRows === 0,
+    reviewedRows,
+    unreviewedRows,
   };
 }
 
-export interface FoldOptions { all?: boolean; startLine?: number; endLine?: number; reviewed: boolean }
-
-// Produce the new reviewed-snapshot content for an approve-range operation.
-// Approval is line-by-line: within a change block, each working line in
-// [startLine, endLine] is folded onto the reviewed side individually, while the
-// rest of the block stays unreviewed. A working line that is approved is written
-// into the reviewed snapshot (so it re-derives as `reviewed`); an unapproved one
-// is omitted (stays `unreviewed`). The old reviewed lines (s.a) are preserved
-// once, just before the first unapproved line in the block, so the unapproved
-// region still diffs. If every working line in the block is approved the old
-// lines vanish (whole block approved); a pure deletion (no working lines) keeps
-// its old lines since there is nothing to approve.
-export function foldReviewedRange(reviewedContent: string, workingContent: string, opts: FoldOptions): string {
-  const W = splitContentLines(workingContent);
-  const R = splitContentLines(reviewedContent);
-  const start = opts.startLine ?? 1;
-  const end = opts.endLine ?? W.length;
-  const approved = (lineNo: number) => opts.reviewed && lineNo >= start && lineNo <= end;
-
-  const segs = diffSegments(R, W);
+// Reconstruct the index (staged) content implied by a set of rows:
+//   context -> always present
+//   add     -> present iff reviewed (staged)
+//   del     -> present iff NOT reviewed (an unstaged deletion keeps the old line
+//              in the index; a staged deletion drops it)
+// `trailingNewline` controls whether the result ends in "\n" (mirrors working).
+export function rebuildIndex(rows: DiffRow[], trailingNewline: boolean): string {
   const out: string[] = [];
-  let bi = 0; // 0-based working line index
-  for (const s of segs) {
-    if (s.type === "equal") { out.push(...s.b); bi += s.b.length; continue; }
-    let keptOld = false;
-    for (let k = 0; k < s.b.length; k++) {
-      if (approved(bi + k + 1)) {
-        out.push(s.b[k]);
-      } else if (!keptOld) {
-        out.push(...s.a);
-        keptOld = true;
-      }
-    }
-    if (s.b.length === 0 && !keptOld) out.push(...s.a);
-    bi += s.b.length;
+  for (const r of rows) {
+    if (r.kind === "context") out.push(r.content);
+    else if (r.kind === "add") { if (r.review === "reviewed") out.push(r.content); }
+    else if (r.review !== "reviewed") out.push(r.content);
   }
-  return out.join("\n");
+  if (out.length === 0) return "";
+  return out.join("\n") + (trailingNewline ? "\n" : "");
 }
+
+// Return a copy of `rows` with the review flag flipped for the add/del rows in
+// the inclusive row-index range [startRow, endRow] (context rows untouched).
+export function toggleRows(rows: DiffRow[], startRow: number, endRow: number, reviewed: boolean): DiffRow[] {
+  const status: RowReview = reviewed ? "reviewed" : "unreviewed";
+  return rows.map((r, i) => {
+    if (i < startRow || i > endRow || r.kind === "context") return r;
+    return { ...r, review: status };
+  });
+}
+
+export { linesEqual };

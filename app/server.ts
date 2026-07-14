@@ -1,12 +1,12 @@
 import { readdir, readFile, writeFile, mkdir, stat, unlink } from "fs/promises";
 import { join, relative, resolve, dirname, basename, extname } from "path";
 import { homedir } from "os";
-import { randomUUID, createHash } from "crypto";
+import { randomUUID } from "crypto";
 import { createHighlighter, type Highlighter } from "shiki";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 import {
-  computeReviewFromContent, foldReviewedRange,
-  type ReviewState,
+  computeDiffRows, summarize, rebuildIndex, toggleRows,
+  type DiffRow,
 } from "./review-engine";
 import homepage from "./public/index.html";
 
@@ -187,63 +187,28 @@ async function deleteNoteFile(id: string): Promise<boolean> {
   }
 }
 
-// --- Review state (shadow index in .revuiw/) ---
+// --- Review (git-native: staged == reviewed) ---
 //
-// The review model mirrors git's three trees:
-//   HEAD   = baseline
-//   review = the content the user has approved ("reviewed")
-//   working = the current file on disk
+// Three content snapshots drive the review view:
+//   HEAD    = baseline (last commit)          -> `git show HEAD:<rel>`
+//   index   = staged tree = the "reviewed" set -> `git show :<rel>`
+//   working = the file on disk
 //
-// A changed line is `reviewed` when it differs from HEAD but matches the
-// reviewed snapshot; it is `unreviewed` when it differs from the reviewed
-// snapshot (i.e. an edit the user has not yet approved). Approval is fully
-// content-pinned: any later edit — by a human or an agent — reappears in
-// diff(review, working) and so becomes unreviewed automatically.
-//
-// The reviewed snapshot is stored as a content-addressed blob under
-// .revuiw/blobs/, referenced by SHA in .revuiw/review.json. This is a shadow
-// index: it never touches the user's real git staging area and works for
-// untracked files too.
+// The view is the HEAD -> working diff as rows; each changed row is reviewed
+// iff the change is present in the index. "Mark reviewed" stages the selected
+// lines, "unmark" unstages them. Staging is done by reconstructing the exact
+// desired index content and writing it directly with git plumbing
+// (hash-object + update-index) — no patch arithmetic, fully git-native, and it
+// works for untracked files too.
 
-interface ReviewEntry { reviewedHash: string }
-type ReviewIndex = Record<string, ReviewEntry>;
-
-function revuiwDir(): string {
-  return join(process.cwd(), ".revuiw");
-}
-
-function blobsDir(): string {
-  return join(revuiwDir(), "blobs");
-}
-
-function reviewIndexFile(): string {
-  return join(revuiwDir(), "review.json");
-}
-
-async function storeBlob(content: string): Promise<string> {
-  const hash = createHash("sha256").update(content).digest("hex");
-  await mkdir(blobsDir(), { recursive: true });
-  const p = join(blobsDir(), hash);
-  try { await stat(p); } catch { await writeFile(p, content); }
-  return hash;
-}
-
-async function readBlob(hash: string): Promise<string | null> {
-  try { return await readFile(join(blobsDir(), hash), "utf-8"); } catch { return null; }
-}
-
-async function loadReviewIndex(): Promise<ReviewIndex> {
-  try { return JSON.parse(await readFile(reviewIndexFile(), "utf-8")); } catch { return {}; }
-}
-
-async function saveReviewIndex(idx: ReviewIndex): Promise<void> {
-  await mkdir(revuiwDir(), { recursive: true });
-  await writeFile(reviewIndexFile(), JSON.stringify(idx, null, 2));
-}
-
-async function runGit(cwd: string, args: string[]): Promise<{ code: number; stdout: string }> {
+async function runGit(cwd: string, args: string[], stdin?: string): Promise<{ code: number; stdout: string }> {
   try {
-    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "ignore" });
+    const proc = Bun.spawn(["git", ...args], {
+      cwd,
+      stdin: stdin != null ? Buffer.from(stdin) : "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
     const stdout = await new Response(proc.stdout).text();
     const code = await proc.exited;
     return { code, stdout };
@@ -262,49 +227,108 @@ async function gitHeadContent(root: string, relPath: string): Promise<string | n
   return code === 0 ? stdout : null;
 }
 
-async function reviewContext(absFile: string) {
+async function gitIndexContent(root: string, relPath: string): Promise<string | null> {
+  const { code, stdout } = await runGit(root, ["show", `:${relPath}`]);
+  return code === 0 ? stdout : null;
+}
+
+// Resolve the git file mode: prefer the staged mode, then HEAD, then the
+// working file's executable bit, defaulting to a regular file.
+async function getMode(root: string, relPath: string): Promise<string> {
+  const staged = await runGit(root, ["ls-files", "-s", "--", relPath]);
+  let m = staged.stdout.match(/^(\d{6}) /);
+  if (m) return m[1];
+  const head = await runGit(root, ["ls-tree", "HEAD", "--", relPath]);
+  m = head.stdout.match(/^(\d{6}) /);
+  if (m) return m[1];
+  try {
+    const s = await stat(join(root, relPath));
+    return s.mode & 0o111 ? "100755" : "100644";
+  } catch {
+    return "100644";
+  }
+}
+
+// Write `content` as the staged version of relPath. An empty result for an
+// untracked file (nothing staged) removes the index entry entirely.
+async function stageIndexContent(root: string, relPath: string, content: string, hasHead: boolean): Promise<void> {
+  if (content === "" && !hasHead) {
+    await runGit(root, ["update-index", "--force-remove", "--", relPath]);
+    return;
+  }
+  const mode = await getMode(root, relPath);
+  const { stdout } = await runGit(root, ["hash-object", "-w", "--path", relPath, "--stdin"], content);
+  const sha = stdout.trim();
+  if (!sha) return;
+  await runGit(root, ["update-index", "--add", "--cacheinfo", `${mode},${sha},${relPath}`]);
+}
+
+interface ReviewRow extends DiffRow {
+  tokens: Token[] | null;
+}
+
+interface ReviewResult {
+  inRepo: boolean;
+  lang: string | null;
+  rows: ReviewRow[];
+  changed: boolean;
+  fullyReviewed: boolean;
+  reviewedRows: number;
+  unreviewedRows: number;
+}
+
+// Attach a highlighted token line to each row: added/context rows are coloured
+// from the working tree (by newLine), deletions from HEAD (by oldLine).
+function attachTokens(rows: DiffRow[], head: string | null, working: string, lang: string | null): ReviewRow[] {
+  const wTokens = tokenizeCode(working, lang);
+  const hTokens = head ? tokenizeCode(head, lang) : null;
+  return rows.map((r) => {
+    let tokens: Token[] | null = null;
+    if (r.kind === "del") tokens = hTokens && r.oldLine ? hTokens[r.oldLine - 1] ?? null : null;
+    else tokens = wTokens && r.newLine ? wTokens[r.newLine - 1] ?? null : null;
+    return { ...r, tokens };
+  });
+}
+
+async function computeReview(absFile: string): Promise<ReviewResult | null> {
+  let working: string;
+  try { working = await readFile(absFile, "utf-8"); } catch { return null; }
   const root = await findRepoRoot(absFile);
-  const relPath = root ? relative(root, absFile) : "";
-  const head = root ? await gitHeadContent(root, relPath) : null;
-  const idx = await loadReviewIndex();
-  const entry = idx[absFile];
-  const headContent = head ?? "";
-  const reviewedContent = entry ? (await readBlob(entry.reviewedHash)) ?? headContent : headContent;
-  return { root, relPath, head, headContent, reviewedContent, idx };
+  const rel = root ? relative(root, absFile) : "";
+  const head = root ? await gitHeadContent(root, rel) : null;
+  const index = root ? await gitIndexContent(root, rel) : null;
+  const rows = computeDiffRows(head, index, working);
+  const summary = summarize(rows);
+  const lang = getLang(absFile);
+  return { inRepo: !!root, lang, rows: attachTokens(rows, head, working, lang), ...summary };
 }
 
-async function computeReview(absFile: string): Promise<ReviewState | null> {
+interface MarkOptions { all?: boolean; startRow?: number; endRow?: number; reviewed: boolean }
+
+async function markReview(absFile: string, opts: MarkOptions): Promise<ReviewResult | null> {
   let working: string;
   try { working = await readFile(absFile, "utf-8"); } catch { return null; }
-  const { head, reviewedContent } = await reviewContext(absFile);
-  return computeReviewFromContent(head, reviewedContent, working);
-}
+  const root = await findRepoRoot(absFile);
+  if (!root) return computeReview(absFile);
+  const rel = relative(root, absFile);
+  const head = await gitHeadContent(root, rel);
+  const index = await gitIndexContent(root, rel);
+  let rows = computeDiffRows(head, index, working);
 
-interface MarkOptions { all?: boolean; startLine?: number; endLine?: number; reviewed: boolean }
-
-async function markReview(absFile: string, opts: MarkOptions): Promise<ReviewState | null> {
-  let working: string;
-  try { working = await readFile(absFile, "utf-8"); } catch { return null; }
-
-  const { reviewedContent, idx } = await reviewContext(absFile);
-
-  if (!opts.reviewed && opts.all) {
-    // Reset: drop approval entirely -> reviewed falls back to HEAD.
-    delete idx[absFile];
-  } else if (opts.reviewed && opts.all) {
-    // Approve everything: reviewed snapshot == working tree.
-    idx[absFile] = { reviewedHash: await storeBlob(working) };
-  } else {
-    // Approve a working-line range.
-    const folded = foldReviewedRange(reviewedContent, working, opts);
-    idx[absFile] = { reviewedHash: await storeBlob(folded) };
+  if (opts.all) {
+    rows = toggleRows(rows, 0, rows.length - 1, opts.reviewed);
+  } else if (opts.startRow != null && opts.endRow != null) {
+    rows = toggleRows(rows, opts.startRow, opts.endRow, opts.reviewed);
   }
 
-  await saveReviewIndex(idx);
+  const newIndex = rebuildIndex(rows, working.endsWith("\n"));
+  await stageIndexContent(root, rel, newIndex, head !== null);
   return computeReview(absFile);
 }
 
-async function reviewSummary(root: string): Promise<{ files: Record<string, { changed: boolean; fullyReviewed: boolean; unreviewedLineCount: number }> }> {
+interface SummaryEntry { changed: boolean; fullyReviewed: boolean; unreviewedRows: number }
+
+async function reviewSummary(root: string): Promise<{ files: Record<string, SummaryEntry> }> {
   const changedFiles = new Set<string>();
   const tracked = await runGit(root, ["diff", "--name-only", "HEAD"]);
   if (tracked.code === 0) {
@@ -315,14 +339,14 @@ async function reviewSummary(root: string): Promise<{ files: Record<string, { ch
     for (const f of untracked.stdout.split("\n")) if (f.trim()) changedFiles.add(join(root, f.trim()));
   }
 
-  const files: Record<string, { changed: boolean; fullyReviewed: boolean; unreviewedLineCount: number }> = {};
+  const files: Record<string, SummaryEntry> = {};
   for (const f of changedFiles) {
     const state = await computeReview(f).catch(() => null);
     if (state && state.changed) {
       files[f] = {
         changed: true,
         fullyReviewed: state.fullyReviewed,
-        unreviewedLineCount: state.unreviewedLineCount,
+        unreviewedRows: state.unreviewedRows,
       };
     }
   }
@@ -618,7 +642,7 @@ Bun.serve({
         const filePath = url.searchParams.get("path");
         if (!filePath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
         const state = await computeReview(resolve(filePath));
-        const body = state ?? { tracked: false, changed: false, fullyReviewed: true, lineStatus: [], hunks: [], unreviewedLineCount: 0, reviewedLineCount: 0 };
+        const body = state ?? { inRepo: false, lang: null, rows: [], changed: false, fullyReviewed: true, reviewedRows: 0, unreviewedRows: 0 };
         return new Response(JSON.stringify(body), {
           headers: { "Content-Type": "application/json" },
         });
@@ -629,8 +653,8 @@ Bun.serve({
         if (!body.path) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
         const state = await markReview(resolve(body.path), {
           all: body.all === true,
-          startLine: body.startLine,
-          endLine: body.endLine,
+          startRow: body.startRow,
+          endRow: body.endRow,
           reviewed: body.reviewed !== false,
         });
         return new Response(JSON.stringify(state), {

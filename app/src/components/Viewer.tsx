@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { layout, prepare } from "@chenglou/pretext";
 import { useSetting } from "../hooks";
 import type { SelectionContext } from "../opencode";
-import type { ReviewState } from "../review";
+import type { ReviewState, DiffRow } from "../review";
 
 export interface Placement {
   x: number;
@@ -11,8 +11,8 @@ export interface Placement {
 
 export interface MarkReviewArgs {
   all?: boolean;
-  startLine?: number;
-  endLine?: number;
+  startRow?: number;
+  endRow?: number;
   reviewed?: boolean;
 }
 
@@ -157,15 +157,8 @@ function renderTokenLine(line: Token[]) {
   ));
 }
 
-function renderLine(tokens: Token[][] | null, plainLines: string[], i: number) {
-  const tokenLine = tokens?.[i];
-  return tokenLine ? renderTokenLine(tokenLine) : plainLines[i];
-}
-
-function splitLines(content: string) {
-  const lines = content.split("\n");
-  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
-  return lines;
+function renderRow(row: DiffRow & { tokens: Token[] | null }) {
+  return row.tokens ? renderTokenLine(row.tokens) : row.content;
 }
 
 function nextScrollOff(value: number) {
@@ -174,10 +167,6 @@ function nextScrollOff(value: number) {
 }
 
 export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCreateNote, anchors = [], onAnchorClick, review, onMarkReviewed, reloadToken }: Props) {
-  const [content, setContent] = useState("");
-  const [tokens, setTokens] = useState<Token[][] | null>(null);
-  const [lang, setLang] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [wrap, setWrap] = useSetting("viewer:wrap", false);
   const [relNum, setRelNum] = useSetting("viewer:relnumber", false);
   const [scrollOff, setScrollOff] = useSetting("viewer:scrolloff", 5);
@@ -191,9 +180,33 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
   const cursorMapRef = useRef<Map<string, number>>(new Map());
   const prevFileRef = useRef<string | null>(null);
 
-  const plainLines = useMemo(() => splitLines(content), [content]);
+  const loading = !!filePath && review === null;
+  const lang = review?.lang ?? null;
+  const rows = useMemo<(DiffRow & { tokens: Token[] | null })[]>(
+    () => (review?.rows as (DiffRow & { tokens: Token[] | null })[]) ?? [],
+    [review],
+  );
+  const plainLines = useMemo(() => rows.map(r => r.content), [rows]);
   const lines = plainLines;
   const lineCount = lines.length;
+
+  // Map a 1-indexed working-tree line to its row index (for anchors/notes,
+  // which are keyed on working-tree lines, not diff-row positions).
+  const newLineToRow = useMemo(() => {
+    const m = new Map<number, number>();
+    rows.forEach((r, i) => { if (r.newLine != null) m.set(r.newLine, i); });
+    return m;
+  }, [rows]);
+
+  const rowRangeForLines = useCallback((startLine: number, endLine: number): [number, number] | null => {
+    let lo = Infinity, hi = -Infinity;
+    for (let ln = startLine; ln <= endLine; ln++) {
+      const r = newLineToRow.get(ln);
+      if (r != null) { lo = Math.min(lo, r); hi = Math.max(hi, r); }
+    }
+    return hi >= lo ? [lo, hi] : null;
+  }, [newLineToRow]);
+
   const maxLineLength = useMemo(() => Math.max(1, ...lines.map(line => expandTabs(line).length)), [lines]);
   const wrapWidth = Math.max(1, viewport.width - CODE_PAD_LEFT - CODE_PAD_RIGHT);
 
@@ -322,7 +335,8 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
   }, [metrics]);
 
   const cursorAnchors = useMemo(() => {
-    const line = cursorLine + 1;
+    const line = rows[cursorLine]?.newLine ?? -1;
+    if (line < 0) return [] as typeof anchors;
     return anchors
       .filter(a => a.startLine <= line && line <= a.endLine)
       .sort((a, b) => {
@@ -417,9 +431,10 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
       if (activeCursorAnchor && e.key === "Enter") {
         e.preventDefault();
         countRef.current = "";
+        const rr = rowRangeForLines(activeCursorAnchor.startLine, activeCursorAnchor.endLine);
         onAnchorClick?.(
           activeCursorAnchor.id,
-          placementForRange(activeCursorAnchor.startLine - 1, activeCursorAnchor.endLine - 1),
+          rr ? placementForRange(rr[0], rr[1]) : undefined,
         );
         return;
       }
@@ -497,11 +512,15 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
           const cur = cursorRef.current;
           const start = visualAnchor === null ? cur : Math.min(visualAnchor, cur);
           const end = visualAnchor === null ? cur : Math.max(visualAnchor, cur);
+          // Selection context is expressed in working-tree lines; pure-deletion
+          // rows have no working line and are skipped.
+          const selRows = rows.slice(start, end + 1).filter(r => r.newLine != null);
+          if (selRows.length === 0) { setVisualAnchor(null); break; }
           const sel: SelectionContext = {
             path: filePath,
-            startLine: start + 1,
-            endLine: end + 1,
-            text: plainLines.slice(start, end + 1).join("\n"),
+            startLine: selRows[0].newLine!,
+            endLine: selRows[selRows.length - 1].newLine!,
+            text: selRows.map(r => r.content).join("\n"),
             lang: lang || undefined,
           };
           // c -> attach to main chat (flow A); C -> create a note (flow B)
@@ -510,13 +529,15 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
           setVisualAnchor(null);
           break;
         }
-        case "r": {
+        case "r":
+        case "u": {
           e.preventDefault();
           if (!onMarkReviewed) break;
           const cur = cursorRef.current;
           const start = visualAnchor === null ? cur : Math.min(visualAnchor, cur);
           const end = visualAnchor === null ? cur : Math.max(visualAnchor, cur);
-          onMarkReviewed({ startLine: start + 1, endLine: end + 1, reviewed: true });
+          // r stages (reviewed), u unstages (unreviewed) the selected rows.
+          onMarkReviewed({ startRow: start, endRow: end, reviewed: e.key === "r" });
           setVisualAnchor(null);
           break;
         }
@@ -525,47 +546,7 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, plainLines, lang, onSendToChat, onCreateNote, placementForRange, activeCursorAnchor, cursorAnchors, onAnchorClick, onMarkReviewed]);
-
-  useEffect(() => {
-    if (!filePath) {
-      setContent("");
-      setTokens(null);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setTokens(null);
-
-    fetch(`/api/read?path=${encodeURIComponent(filePath)}`)
-      .then(r => r.json())
-      .then(data => {
-        if (cancelled) return;
-        setContent(data.content || "");
-        setLang(data.lang || null);
-        setLoading(false);
-
-        if (data.lang) {
-          fetch(`/api/highlight?path=${encodeURIComponent(filePath)}`)
-            .then(r => r.json())
-            .then(hl => {
-              if (!cancelled && hl.tokens) setTokens(hl.tokens);
-            })
-            .catch(() => {});
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setContent("Error reading file");
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filePath, reloadToken]);
+  }, [filePath, focused, lineCount, loading, moveCursor, visualAnchor, rows, rowRangeForLines, plainLines, lang, onSendToChat, onCreateNote, placementForRange, activeCursorAnchor, cursorAnchors, onAnchorClick, onMarkReviewed]);
 
   const handleLineClick = useCallback((e: React.MouseEvent) => {
     const body = bodyRef.current;
@@ -600,26 +581,26 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
               <span className="viewer-review-label">
                 {review.fullyReviewed
                   ? `${"\u2713"} reviewed`
-                  : `${review.unreviewedLineCount} unreviewed`}
+                  : `${review.unreviewedRows} unreviewed`}
               </span>
               {!review.fullyReviewed && (
                 <button
                   className="viewer-review-btn"
                   onClick={() => onMarkReviewed?.({ all: true, reviewed: true })}
-                  title="Mark the whole file reviewed"
+                  title="Stage the whole file (mark reviewed)"
                 >Review all</button>
               )}
-              {(review.reviewedLineCount > 0 || review.fullyReviewed) && (
+              {(review.reviewedRows > 0 || review.fullyReviewed) && (
                 <button
                   className="viewer-review-btn reset"
                   onClick={() => onMarkReviewed?.({ all: true, reviewed: false })}
-                  title="Reset review — mark all changes unreviewed again"
+                  title="Unstage all changes (mark unreviewed again)"
                 >Reset</button>
               )}
             </span>
           )}
           {visualAnchor !== null && (
-            <span className="viewer-mode">VISUAL LINE <span className="viewer-mode-hint">c chat · C note · r review</span></span>
+            <span className="viewer-mode">VISUAL LINE <span className="viewer-mode-hint">c chat · C note · r review · u unreview</span></span>
           )}
           {visualAnchor === null && activeCursorAnchor && (
             <span className={`viewer-anchor-hint ${activeCursorAnchor.open ? "open" : ""}`}>
@@ -674,8 +655,10 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
               />
             )}
             {anchors.map(a => {
-              const startMetric = metrics[a.startLine - 1];
-              const endMetric = metrics[a.endLine - 1] ?? startMetric;
+              const rr = rowRangeForLines(a.startLine, a.endLine);
+              if (!rr) return null;
+              const startMetric = metrics[rr[0]];
+              const endMetric = metrics[rr[1]] ?? startMetric;
               if (!startMetric) return null;
               const height = endMetric.top + endMetric.height - startMetric.top;
               const isActive = activeCursorAnchor?.id === a.id;
@@ -696,30 +679,34 @@ export function Viewer({ filePath, onClose, focused, onFocus, onSendToChat, onCr
                     onMouseDown={e => {
                       e.stopPropagation();
                       e.preventDefault();
-                      onAnchorClick?.(a.id, placementForRange(a.startLine - 1, a.endLine - 1));
+                      onAnchorClick?.(a.id, placementForRange(rr[0], rr[1]));
                     }}
                   />
                 </React.Fragment>
               );
             })}
-            <pre className={`viewer-code ${tokens ? "shiki" : ""}`}>
+            <pre className="viewer-code shiki">
               <code>
                 {Array.from({ length: range.end - range.start }, (_, offset) => {
                   const i = range.start + offset;
                   const metric = metrics[i];
+                  const row = rows[i];
                   const isCursor = i === cursorLine;
                   const isSelected = i >= selectionStart && i <= selectionEnd;
-                  const lineNumber = relNum && !isCursor ? Math.abs(i - cursorLine) : i + 1;
-                  const rev = review?.lineStatus?.[i];
+                  const lineNo = row.kind === "del" ? row.oldLine : row.newLine;
+                  const marker = row.kind === "add" ? "+" : row.kind === "del" ? "-" : "";
+                  const displayNum = relNum && !isCursor ? Math.abs(i - cursorLine) : lineNo ?? "";
+                  const rev = row.review;
                   return (
                     <span
-                      className={`line ${isCursor ? "cursor-line" : ""} ${isSelected ? "selected-line" : ""} ${rev && rev !== "unchanged" ? `rev-${rev}` : ""}`}
+                      className={`line diff-${row.kind} ${isCursor ? "cursor-line" : ""} ${isSelected ? "selected-line" : ""} ${rev ? `rev-${rev}` : ""}`}
                       key={i}
                       style={{ top: metric.top, minHeight: metric.height }}
                     >
-                      <span className="line-number">{lineNumber}</span>
+                      <span className="line-marker">{marker}</span>
+                      <span className="line-number">{displayNum}</span>
                       <span className="line-content">
-                        {renderLine(tokens, plainLines, i)}
+                        {renderRow(row)}
                       </span>
                     </span>
                   );

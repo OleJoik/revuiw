@@ -16,6 +16,7 @@
   --accent: #89b4fa;
   --green: #a6e3a1;
   --yellow: #f9e2af;
+  --red: #f38ba8;
   --border: #313244;
   --font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
 }
@@ -694,13 +695,23 @@ html, body, #root {
 
 .viewer-body .line {
   display: grid;
-  grid-template-columns: 9ch minmax(0, 1fr);
+  grid-template-columns: 1.5ch 7.5ch minmax(0, 1fr);
   position: absolute;
   left: 0;
   right: 0;
   padding: 0 16px 0 0;
   min-height: 18px;
 }
+
+.viewer-body .line-marker {
+  text-align: center;
+  user-select: none;
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.viewer-body .diff-add .line-marker { color: var(--green); }
+.viewer-body .diff-del .line-marker { color: var(--red); }
 
 .viewer-body .line-number {
   padding-right: 2ch;
@@ -733,14 +744,23 @@ html, body, #root {
   min-width: 0;
 }
 
-/* Review overlay: per-line approval state in the far-left gutter. */
+/* Diff nature (background): additions green-tinted, deletions red-tinted. */
+.viewer-body .line.diff-add {
+  background: rgba(166, 227, 161, 0.09);
+}
+
+.viewer-body .line.diff-del {
+  background: rgba(243, 139, 168, 0.10);
+}
+
+/* Review status (orthogonal to add/del): a far-left gutter stripe.
+   Reviewed = staged (blue accent); unreviewed = still working-tree (yellow). */
 .viewer-body .line.rev-unreviewed {
   box-shadow: inset 3px 0 0 var(--yellow);
-  background: rgba(249, 226, 175, 0.05);
 }
 
 .viewer-body .line.rev-reviewed {
-  box-shadow: inset 3px 0 0 var(--green);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .viewer-body .line.rev-unreviewed .line-number {
@@ -749,8 +769,8 @@ html, body, #root {
 }
 
 .viewer-body .line.rev-reviewed .line-number {
-  color: var(--green);
-  opacity: 0.55;
+  color: var(--accent);
+  opacity: 0.6;
 }
 
 .viewer-body.nowrap .line {

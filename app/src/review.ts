@@ -1,34 +1,41 @@
-// Review state: the per-line approval overlay for a file.
+// Review state: the git-native diff view for a file.
 //
-// The server compares three trees — HEAD (baseline), the reviewed snapshot
-// (what you approved), and the working tree (current file) — and reports a
-// status per working-tree line:
-//   unchanged  — identical to HEAD, nothing to review
-//   reviewed   — changed from HEAD but matches what you approved (green)
-//   unreviewed — differs from what you approved; needs your control (yellow)
-//
-// Approval is content-pinned: any later edit (human or agent) reappears as
-// unreviewed automatically, because the server just re-diffs the content.
+// The server reports the HEAD -> working diff as a list of rows. Each changed
+// row is classified against the git index (the staged tree):
+//   reviewed   — the change is staged (green)
+//   unreviewed — the change is only in the working tree (yellow)
+// "Mark reviewed" stages the selected rows, "unmark" unstages them. Because the
+// index IS the reviewed set, committing later commits exactly what was reviewed.
 
-export type LineStatus = "unchanged" | "reviewed" | "unreviewed";
+export type RowKind = "context" | "add" | "del";
+export type RowReview = "reviewed" | "unreviewed" | null;
 
-export interface ReviewHunk {
-  startLine: number; // 1-indexed, inclusive
-  endLine: number;   // 1-indexed, inclusive
+export interface Token {
+  content: string;
+  color: string;
+}
+
+export interface DiffRow {
+  kind: RowKind;
+  oldLine: number | null; // 1-indexed line in HEAD (null for pure additions)
+  newLine: number | null; // 1-indexed line in working (null for deletions)
+  content: string;
+  review: RowReview;      // null for context rows
+  tokens: Token[] | null; // highlighted tokens for this row (may be null)
 }
 
 export interface ReviewState {
-  tracked: boolean;
+  inRepo: boolean;
+  lang: string | null;
+  rows: DiffRow[];
   changed: boolean;
   fullyReviewed: boolean;
-  lineStatus: LineStatus[];
-  hunks: ReviewHunk[];
-  unreviewedLineCount: number;
-  reviewedLineCount: number;
+  reviewedRows: number;
+  unreviewedRows: number;
 }
 
 export interface ReviewSummary {
-  files: Record<string, { changed: boolean; fullyReviewed: boolean; unreviewedLineCount: number }>;
+  files: Record<string, { changed: boolean; fullyReviewed: boolean; unreviewedRows: number }>;
 }
 
 export async function getReview(path: string): Promise<ReviewState | null> {
@@ -43,8 +50,8 @@ export async function getReview(path: string): Promise<ReviewState | null> {
 export interface MarkArgs {
   path: string;
   all?: boolean;
-  startLine?: number;
-  endLine?: number;
+  startRow?: number; // inclusive row index into ReviewState.rows
+  endRow?: number;   // inclusive row index into ReviewState.rows
   reviewed?: boolean; // defaults to true
 }
 
@@ -68,9 +75,4 @@ export async function getReviewSummary(root: string): Promise<ReviewSummary> {
   } catch {
     return { files: {} };
   }
-}
-
-// Does the given working-tree line (1-indexed) fall inside an unreviewed hunk?
-export function hunkAt(hunks: ReviewHunk[], line: number): ReviewHunk | null {
-  return hunks.find(h => h.startLine <= line && line <= h.endLine) ?? null;
 }

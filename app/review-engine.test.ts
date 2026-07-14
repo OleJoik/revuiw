@@ -2,8 +2,11 @@ import { test, expect, describe } from "bun:test";
 import {
   splitContentLines,
   diffSegments,
-  computeReviewFromContent,
-  foldReviewedRange,
+  computeDiffRows,
+  summarize,
+  rebuildIndex,
+  toggleRows,
+  type DiffRow,
 } from "./review-engine";
 
 describe("splitContentLines", () => {
@@ -58,138 +61,113 @@ describe("diffSegments", () => {
   });
 });
 
-describe("computeReviewFromContent", () => {
-  test("unchanged tracked file: everything reviewed, nothing pending", () => {
-    const s = computeReviewFromContent("a\nb\nc\n", "a\nb\nc\n", "a\nb\nc\n");
-    expect(s.tracked).toBe(true);
-    expect(s.changed).toBe(false);
-    expect(s.fullyReviewed).toBe(true);
-    expect(s.lineStatus).toEqual(["unchanged", "unchanged", "unchanged"]);
-    expect(s.unreviewedLineCount).toBe(0);
-    expect(s.reviewedLineCount).toBe(0);
-    expect(s.hunks).toEqual([]);
+// Compact helper to describe a row: kind + content + review flag.
+const desc = (rows: DiffRow[]) =>
+  rows.map((r) => `${r.kind === "context" ? " " : r.kind === "add" ? "+" : "-"}${r.content}${r.review ? "(" + r.review[0] + ")" : ""}`);
+
+describe("computeDiffRows", () => {
+  test("unchanged tracked file: all context, nothing changed", () => {
+    const rows = computeDiffRows("a\nb\nc\n", "a\nb\nc\n", "a\nb\nc\n");
+    expect(rows.every((r) => r.kind === "context")).toBe(true);
+    expect(summarize(rows)).toEqual({ changed: false, fullyReviewed: true, reviewedRows: 0, unreviewedRows: 0 });
   });
 
-  test("edit not yet approved is unreviewed", () => {
-    // reviewed snapshot still equals HEAD
-    const s = computeReviewFromContent("a\nb\nc\n", "a\nb\nc\n", "a\nB\nc\n");
-    expect(s.changed).toBe(true);
-    expect(s.fullyReviewed).toBe(false);
-    expect(s.lineStatus).toEqual(["unchanged", "unreviewed", "unchanged"]);
-    expect(s.unreviewedLineCount).toBe(1);
-    expect(s.reviewedLineCount).toBe(0);
-    expect(s.hunks).toEqual([{ startLine: 2, endLine: 2 }]);
+  test("unstaged edit: replacement shows del+add, add unreviewed", () => {
+    // HEAD==index (nothing staged), working changed line 2
+    const rows = computeDiffRows("a\nb\nc\n", "a\nb\nc\n", "a\nB\nc\n");
+    expect(desc(rows)).toEqual([" a", "-b(u)", "+B(u)", " c"]);
+    expect(summarize(rows)).toMatchObject({ changed: true, fullyReviewed: false, unreviewedRows: 2 });
   });
 
-  test("approved edit (reviewed==working) shows as reviewed, not unchanged", () => {
-    const s = computeReviewFromContent("a\nb\nc\n", "a\nB\nc\n", "a\nB\nc\n");
-    expect(s.changed).toBe(true);
-    expect(s.fullyReviewed).toBe(true);
-    expect(s.lineStatus).toEqual(["unchanged", "reviewed", "unchanged"]);
-    expect(s.unreviewedLineCount).toBe(0);
-    expect(s.reviewedLineCount).toBe(1);
-    expect(s.hunks).toEqual([]);
+  test("staged edit: index==working, change is reviewed", () => {
+    const rows = computeDiffRows("a\nb\nc\n", "a\nB\nc\n", "a\nB\nc\n");
+    expect(desc(rows)).toEqual([" a", "-b(r)", "+B(r)", " c"]);
+    expect(summarize(rows)).toMatchObject({ fullyReviewed: true, reviewedRows: 2, unreviewedRows: 0 });
   });
 
-  test("partial: one line approved, a later fresh edit still pending", () => {
-    // HEAD a/b/c ; reviewed approved line 2 (B) ; working further changed line 3 (C)
-    const s = computeReviewFromContent("a\nb\nc\n", "a\nB\nc\n", "a\nB\nC\n");
-    expect(s.lineStatus).toEqual(["unchanged", "reviewed", "unreviewed"]);
-    expect(s.reviewedLineCount).toBe(1);
-    expect(s.unreviewedLineCount).toBe(1);
-    expect(s.fullyReviewed).toBe(false);
-    expect(s.hunks).toEqual([{ startLine: 3, endLine: 3 }]);
+  test("partial: one line staged, a later fresh edit still unstaged", () => {
+    // HEAD a/b/c ; index staged line 2 (B) ; working further edits line 3 (C)
+    const rows = computeDiffRows("a\nb\nc\n", "a\nB\nc\n", "a\nB\nC\n");
+    expect(desc(rows)).toEqual([" a", "-b(r)", "-c(u)", "+B(r)", "+C(u)"]);
+    expect(summarize(rows)).toMatchObject({ reviewedRows: 2, unreviewedRows: 2 });
   });
 
-  test("re-editing an already-approved line invalidates it (content-pinned)", () => {
-    // reviewed approved line 2 as B, but the agent changed it again to B2
-    const s = computeReviewFromContent("a\nb\nc\n", "a\nB\nc\n", "a\nB2\nc\n");
-    expect(s.lineStatus).toEqual(["unchanged", "unreviewed", "unchanged"]);
-    expect(s.fullyReviewed).toBe(false);
-    expect(s.unreviewedLineCount).toBe(1);
+  test("untracked file (head empty): all additions unreviewed", () => {
+    const rows = computeDiffRows("", "", "x\ny\n");
+    expect(desc(rows)).toEqual(["+x(u)", "+y(u)"]);
+    expect(summarize(rows)).toMatchObject({ changed: true, fullyReviewed: false, unreviewedRows: 2 });
   });
 
-  test("untracked file (no HEAD): all lines pending, tracked=false", () => {
-    const s = computeReviewFromContent(null, "", "x\ny\n");
-    expect(s.tracked).toBe(false);
-    expect(s.changed).toBe(true);
-    expect(s.fullyReviewed).toBe(false);
-    expect(s.lineStatus).toEqual(["unreviewed", "unreviewed"]);
-    expect(s.unreviewedLineCount).toBe(2);
-    expect(s.hunks).toEqual([{ startLine: 1, endLine: 2 }]);
+  test("staged deletion: HEAD line dropped in index -> del reviewed", () => {
+    // HEAD a/x/b ; index a/b (x staged for removal) ; working a/b
+    const rows = computeDiffRows("a\nx\nb\n", "a\nb\n", "a\nb\n");
+    expect(desc(rows)).toEqual([" a", "-x(r)", " b"]);
+    expect(summarize(rows)).toMatchObject({ fullyReviewed: true, reviewedRows: 1 });
   });
 
-  test("multi-line insertion produces one contiguous hunk", () => {
-    const s = computeReviewFromContent("a\nd\n", "a\nd\n", "a\nb\nc\nd\n");
-    expect(s.lineStatus).toEqual(["unchanged", "unreviewed", "unreviewed", "unchanged"]);
-    expect(s.hunks).toEqual([{ startLine: 2, endLine: 3 }]);
+  test("unstaged deletion: HEAD line still in index -> del unreviewed", () => {
+    const rows = computeDiffRows("a\nx\nb\n", "a\nx\nb\n", "a\nb\n");
+    expect(desc(rows)).toEqual([" a", "-x(u)", " b"]);
+    expect(summarize(rows)).toMatchObject({ fullyReviewed: false, unreviewedRows: 1 });
+  });
+
+  test("line numbers track HEAD (old) and working (new)", () => {
+    const rows = computeDiffRows("a\nb\nc\n", "a\nb\nc\n", "a\nB\nc\n");
+    expect(rows.map((r) => [r.oldLine, r.newLine])).toEqual([
+      [1, 1],   // context a
+      [2, null], // del b
+      [null, 2], // add B
+      [3, 3],   // context c
+    ]);
   });
 });
 
-describe("foldReviewedRange", () => {
-  const norm = (s: string) => splitContentLines(s);
-
-  test("approving the exact changed line folds working onto reviewed", () => {
-    const next = foldReviewedRange("a\nb\nc\n", "a\nB\nc\n", { reviewed: true, startLine: 2, endLine: 2 });
-    expect(norm(next)).toEqual(["a", "B", "c"]);
+describe("rebuildIndex", () => {
+  test("reviewed add is kept, unreviewed add is dropped", () => {
+    const rows = computeDiffRows("a\nc\n", "a\nc\n", "a\nb\nc\n"); // add b unreviewed
+    expect(rebuildIndex(rows, true)).toBe("a\nc\n");
+    const staged = toggleRows(rows, 0, rows.length - 1, true);
+    expect(rebuildIndex(staged, true)).toBe("a\nb\nc\n");
   });
 
-  test("approving one hunk leaves a non-intersecting hunk unreviewed", () => {
-    // two separate changes: line 1 (a->A) and line 3 (c->C); approve only line 1
-    const next = foldReviewedRange("a\nb\nc\n", "A\nb\nC\n", { reviewed: true, startLine: 1, endLine: 1 });
-    expect(norm(next)).toEqual(["A", "b", "c"]);
-
-    // feed the new reviewed snapshot back: line 1 now clean, line 3 still pending
-    const s = computeReviewFromContent("a\nb\nc\n", next, "A\nb\nC\n");
-    expect(s.lineStatus).toEqual(["reviewed", "unchanged", "unreviewed"]);
-    expect(s.unreviewedLineCount).toBe(1);
+  test("reviewed del drops the line, unreviewed del keeps it", () => {
+    const rows = computeDiffRows("a\nx\nb\n", "a\nx\nb\n", "a\nb\n"); // del x unreviewed
+    expect(rebuildIndex(rows, true)).toBe("a\nx\nb\n");
+    const staged = toggleRows(rows, 0, rows.length - 1, true);
+    expect(rebuildIndex(staged, true)).toBe("a\nb\n");
   });
 
-  test("approving a full range reproduces the working content", () => {
-    const working = "A\nb\nC\n";
-    const next = foldReviewedRange("a\nb\nc\n", working, { reviewed: true, startLine: 1, endLine: 3 });
-    expect(norm(next)).toEqual(norm(working));
-    const s = computeReviewFromContent("a\nb\nc\n", next, working);
-    expect(s.fullyReviewed).toBe(true);
+  test("no trailing newline is respected", () => {
+    const rows = computeDiffRows("a\n", "a\n", "a\nb");
+    const staged = toggleRows(rows, 0, rows.length - 1, true);
+    expect(rebuildIndex(staged, false)).toBe("a\nb");
   });
 
-  test("line-by-line: approving one line of a multi-line insertion leaves the rest pending", () => {
-    // one 2-line insertion at working lines 2..3; approve only line 2
-    const next = foldReviewedRange("a\nd\n", "a\nB\nC\nd\n", { reviewed: true, startLine: 2, endLine: 2 });
-    expect(norm(next)).toEqual(["a", "B", "d"]);
-    const s = computeReviewFromContent("a\nd\n", next, "a\nB\nC\nd\n");
-    expect(s.lineStatus).toEqual(["unchanged", "reviewed", "unreviewed", "unchanged"]);
-    expect(s.fullyReviewed).toBe(false);
+  test("empty result yields empty string", () => {
+    const rows = computeDiffRows("a\n", "a\n", ""); // del a
+    const staged = toggleRows(rows, 0, rows.length - 1, true);
+    expect(rebuildIndex(staged, false)).toBe("");
+  });
+});
+
+describe("toggleRows", () => {
+  test("staging one row of a two-line insertion leaves the other unstaged", () => {
+    const rows = computeDiffRows("a\nd\n", "a\nd\n", "a\nb\nc\nd\n");
+    // rows: context a, add b, add c, context d -> stage only row 1 (b)
+    const staged = toggleRows(rows, 1, 1, true);
+    expect(rebuildIndex(staged, true)).toBe("a\nb\nd\n");
+    expect(summarize(staged)).toMatchObject({ reviewedRows: 1, unreviewedRows: 1 });
   });
 
-  test("line-by-line: approving one line of a multi-line replacement leaves the rest pending", () => {
-    // reviewed p/q replaced by working P/Q/R (lines 1..3); approve only line 2
-    const next = foldReviewedRange("p\nq\n", "P\nQ\nR\n", { reviewed: true, startLine: 2, endLine: 2 });
-    const s = computeReviewFromContent("p\nq\n", next, "P\nQ\nR\n");
-    expect(s.lineStatus).toEqual(["unreviewed", "reviewed", "unreviewed"]);
-    expect(s.reviewedLineCount).toBe(1);
-    expect(s.unreviewedLineCount).toBe(2);
+  test("context rows are never flipped", () => {
+    const rows = computeDiffRows("a\nb\n", "a\nb\n", "a\nB\n");
+    const staged = toggleRows(rows, 0, rows.length - 1, true);
+    expect(staged[0].review).toBe(null); // context a stays null
   });
 
-  test("line-by-line: approving the remaining lines later converges to working", () => {
-    const head = "a\nd\n";
-    const working = "a\nB\nC\nd\n";
-    // step 1: approve only line 2
-    let reviewed = foldReviewedRange(head, working, { reviewed: true, startLine: 2, endLine: 2 });
-    // step 2: approve the still-pending line 3
-    reviewed = foldReviewedRange(reviewed, working, { reviewed: true, startLine: 3, endLine: 3 });
-    expect(norm(reviewed)).toEqual(norm(working));
-    expect(computeReviewFromContent(head, reviewed, working).fullyReviewed).toBe(true);
-  });
-
-  test("a pure deletion is never approved by a range fold (nothing to select)", () => {
-    // reviewed a/x/b, working a/b (line x deleted): approving line 1..2 keeps x in reviewed
-    const next = foldReviewedRange("a\nx\nb\n", "a\nb\n", { reviewed: true, startLine: 1, endLine: 2 });
-    expect(norm(next)).toEqual(["a", "x", "b"]);
-  });
-
-  test("reviewed:false is a no-op fold (keeps reviewed side)", () => {
-    const next = foldReviewedRange("a\nb\nc\n", "a\nB\nc\n", { reviewed: false, startLine: 2, endLine: 2 });
-    expect(norm(next)).toEqual(["a", "b", "c"]);
+  test("unstaging (reviewed:false) marks rows unreviewed", () => {
+    const rows = computeDiffRows("a\nb\n", "a\nB\n", "a\nB\n"); // staged
+    const unstaged = toggleRows(rows, 0, rows.length - 1, false);
+    expect(summarize(unstaged)).toMatchObject({ reviewedRows: 0, unreviewedRows: 2 });
   });
 });

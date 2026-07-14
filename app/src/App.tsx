@@ -35,7 +35,13 @@ export function App() {
     listNotes().then(setNotes).catch(() => {});
   }, []);
 
-  // Load review state whenever the file changes or content is reloaded.
+  // Reset the review overlay immediately on file change so the viewer shows a
+  // loading state (rather than the previous file's rows) until the fetch lands.
+  useEffect(() => { setReview(null); }, [selectedFile]);
+
+  // Load review state whenever the file changes or content is reloaded. On a
+  // pure reload (same file) we keep the current rows visible until the new ones
+  // arrive, avoiding a scroll-losing flash after agent edits.
   useEffect(() => {
     if (!selectedFile) { setReview(null); return; }
     let cancelled = false;
