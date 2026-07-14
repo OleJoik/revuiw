@@ -832,6 +832,40 @@ html, body, #root {
   flex-shrink: 0;
 }
 
+.oc-header-session {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.oc-header-session:hover {
+  text-decoration: underline;
+}
+
+.oc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.oc-new-btn {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.oc-new-btn:hover {
+  color: var(--fg);
+}
+
 .oc-close {
   background: none;
   border: none;
@@ -848,7 +882,7 @@ html, body, #root {
 
 .oc-sessions {
   border-bottom: 1px solid var(--border);
-  max-height: 130px;
+  max-height: 200px;
   overflow-y: auto;
   flex-shrink: 0;
 }

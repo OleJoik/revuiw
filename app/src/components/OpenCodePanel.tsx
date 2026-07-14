@@ -30,6 +30,7 @@ export function OpenCodePanel({
   const [input, setInput] = useState("");
   const [attached, setAttached] = useState<SelectionContext | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragging = useRef(false);
@@ -168,27 +169,30 @@ export function OpenCodePanel({
     <div className={`oc-panel ${focused ? "panel-focused" : ""}`} style={{ width }} onMouseDown={onFocus}>
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} />
       <div className="oc-header">
-        <span>OpenCode</span>
-        <button className="oc-close" onClick={onToggle}>&times;</button>
-      </div>
-      <div className="oc-sessions">
-        <div className="oc-sessions-header">
-          <span>Sessions</span>
-          <button onClick={() => createNewSession()}>+ New</button>
-        </div>
-        <div className="oc-session-list">
-          {sorted.length === 0 && <div className="oc-empty">No sessions</div>}
-          {sorted.slice(0, 20).map(s => (
-            <div
-              key={s.id}
-              className={`oc-session-item ${currentSession?.id === s.id ? "active" : ""}`}
-              onClick={() => selectSession(s)}
-            >
-              {s.title || `Session ${s.id.slice(0, 8)}`}
-            </div>
-          ))}
+        <span className="oc-header-session" onClick={() => { listSessions().then(setSessions).catch(() => {}); setShowSessions(!showSessions); }} title="Switch session">
+          {currentSession?.title || "New conversation"}
+        </span>
+        <div className="oc-header-actions">
+          <button className="oc-new-btn" onClick={() => { setCurrentSession(null); setMessages([]); setShowSessions(false); }} title="New session">+</button>
+          <button className="oc-close" onClick={onToggle}>&times;</button>
         </div>
       </div>
+      {showSessions && (
+        <div className="oc-sessions">
+          <div className="oc-session-list">
+            {sorted.length === 0 && <div className="oc-empty">No sessions</div>}
+            {sorted.slice(0, 20).map(s => (
+              <div
+                key={s.id}
+                className={`oc-session-item ${currentSession?.id === s.id ? "active" : ""}`}
+                onClick={() => { selectSession(s); setShowSessions(false); }}
+              >
+                {s.title || `Session ${s.id.slice(0, 8)}`}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="oc-chat">
         <div className="oc-messages" onClick={handleCopyClick}>
           {messages.length === 0 && <div className="oc-empty">Send a message to start</div>}
