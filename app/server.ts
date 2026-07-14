@@ -203,7 +203,10 @@ async function deleteNoteFile(id: string): Promise<boolean> {
 
 async function runGit(cwd: string, args: string[], stdin?: string): Promise<{ code: number; stdout: string }> {
   try {
-    const proc = Bun.spawn(["git", ...args], {
+    // `-c safe.directory=*` keeps git working on mounted/foreign-owned repos
+    // (e.g. Docker bind mounts) where its dubious-ownership guard would
+    // otherwise make every command fail and tracked files look untracked.
+    const proc = Bun.spawn(["git", "-c", "safe.directory=*", ...args], {
       cwd,
       stdin: stdin != null ? Buffer.from(stdin) : "ignore",
       stdout: "pipe",
