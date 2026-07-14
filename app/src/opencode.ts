@@ -51,6 +51,15 @@ export async function listSessions(): Promise<Session[]> {
   return json(await fetch(`${BASE}/sessions`), [] as Session[]);
 }
 
+export interface OpenCodeConfig {
+  model?: string;
+  agent?: Record<string, { model?: string }>;
+}
+
+export async function getConfig(): Promise<OpenCodeConfig> {
+  return json(await fetch(`${BASE}/config`), {});
+}
+
 export async function createSession(title?: string): Promise<Session | null> {
   const res = await fetch(`${BASE}/sessions`, {
     method: "POST",

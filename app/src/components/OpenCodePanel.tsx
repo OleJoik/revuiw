@@ -3,7 +3,7 @@ import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
   listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
-  listModels, switchModel,
+  listModels, switchModel, getConfig,
   type Session, type Message, type Agent, type SelectionContext, type ModelInfo,
 } from "../opencode";
 
@@ -34,6 +34,7 @@ export function OpenCodePanel({
   const [showSessions, setShowSessions] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [defaultModel, setDefaultModel] = useState<string | null>(null);
   const [verbose, setVerbose] = useSetting("oc:verbose", false);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -71,10 +72,13 @@ export function OpenCodePanel({
     setMessages(msgs);
   }, []);
 
-  // Load sessions when opened
+  // Load sessions and default model when opened
   useEffect(() => {
     if (!open) return;
     listSessions().then(setSessions).catch(() => setSessions([]));
+    getConfig().then(cfg => {
+      if (cfg.model) setDefaultModel(cfg.model);
+    }).catch(() => {});
   }, [open]);
 
   // Report the active main-session id upward so popovers know what to fork
@@ -189,10 +193,10 @@ export function OpenCodePanel({
         {!currentSession?.model && (
           <span
             className="oc-model-badge clickable"
-            title="Select model"
+            title={defaultModel ? `Default: ${defaultModel} — click to change` : "Select model"}
             onClick={() => { listModels().then(setModels).catch(() => {}); setShowModelPicker(!showModelPicker); setShowSessions(false); }}
           >
-            model
+            {defaultModel || "model"}
           </span>
         )}
         <div className="oc-header-actions">

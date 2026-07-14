@@ -682,6 +682,14 @@ Bun.serve({
 
       // --- OpenCode API endpoints ---
 
+      if (pathname === "/api/opencode/config" && req.method === "GET") {
+        const { data, error } = await opencode.config.get();
+        if (error) return new Response(JSON.stringify({ error: "Failed to get config" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(data), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       if (pathname === "/api/opencode/sessions" && req.method === "GET") {
         const { data, error } = await opencode.session.list();
         if (error) return new Response(JSON.stringify({ error: "Failed to list sessions" }), { status: 502, headers: { "Content-Type": "application/json" } });
