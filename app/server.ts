@@ -797,10 +797,11 @@ Bun.serve({
           ocFetch(`${OPENCODE_URL}/provider`).then(r => r.ok ? r.json() : null).catch(() => null),
         ]);
         const models: Record<string, any> = {};
-        // Add models from /api/model
-        if (apiRes.data) {
-          for (const m of Array.isArray(apiRes.data) ? apiRes.data : Object.values(apiRes.data)) {
-            const key = `${(m as any).providerID}/${(m as any).id}`;
+        // Add models from /api/model — apiRes.data is { location, data: [...] }
+        const apiModels = apiRes.data?.data;
+        if (Array.isArray(apiModels)) {
+          for (const m of apiModels) {
+            const key = `${m.providerID}/${m.id}`;
             models[key] = m;
           }
         }
