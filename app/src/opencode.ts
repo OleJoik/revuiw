@@ -228,6 +228,18 @@ export async function startOAuth(providerId: string, body: Record<string, unknow
   return json(res, {});
 }
 
+// Long-polls until the OAuth device code flow completes on the provider side.
+export async function waitOAuthCallback(providerId: string, method: number): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE}/providers/${providerId}/oauth/callback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method }),
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
 export async function setProviderCredentials(providerId: string, body: Record<string, unknown>): Promise<boolean> {
   const res = await fetch(`${BASE}/auth/${providerId}`, {
     method: "PUT",

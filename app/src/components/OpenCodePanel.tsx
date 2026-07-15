@@ -4,7 +4,7 @@ import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
   listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
   listModels, switchModel, listAgents, getConfig, resolveDefaultModel,
-  listProviders, getProviderAuthMethods, startOAuth, setProviderCredentials,
+  listProviders, getProviderAuthMethods, startOAuth, waitOAuthCallback, setProviderCredentials,
   type Session, type Message, type Agent, type SelectionContext, type ModelInfo, type AgentInfo,
   type ProvidersData, type ProviderAuthMethod,
 } from "../opencode";
@@ -309,6 +309,12 @@ export function OpenCodePanel({
                                 const codeMatch = result.instructions.match(/code:\s*(\S+)/i);
                                 const code = codeMatch ? codeMatch[1] : result.instructions;
                                 setDeviceCode({ providerId: p.id, code, url: result.url || "" });
+                                // Long-poll for completion in background
+                                waitOAuthCallback(p.id, i).then(async (ok) => {
+                                  console.log("OAuth callback done:", ok);
+                                  setDeviceCode(null);
+                                  setProvidersData(await listProviders());
+                                });
                               }
                               if (result.url && !result.instructions) {
                                 window.open(result.url, "_blank");

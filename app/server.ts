@@ -834,6 +834,19 @@ Bun.serve({
         return new Response(JSON.stringify(await res.json()), { headers: { "Content-Type": "application/json" } });
       }
 
+      const oauthCallbackMatch = pathname.match(/^\/api\/opencode\/providers\/([^/]+)\/oauth\/callback$/);
+      if (oauthCallbackMatch && req.method === "POST") {
+        const providerId = oauthCallbackMatch[1];
+        const body = await req.json();
+        const res = await ocFetch(`${OPENCODE_URL}/provider/${providerId}/oauth/callback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) return new Response(JSON.stringify({ error: "OAuth callback failed" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(await res.json()), { headers: { "Content-Type": "application/json" } });
+      }
+
       const authSetMatch = pathname.match(/^\/api\/opencode\/auth\/([^/]+)$/);
       if (authSetMatch && req.method === "PUT") {
         const providerId = authSetMatch[1];
