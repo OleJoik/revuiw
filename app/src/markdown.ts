@@ -48,17 +48,25 @@ const highlightCache = new Map<string, string>();
  * their innerHTML with highlighted spans.
  */
 export async function highlightCodeBlocks(root: HTMLElement): Promise<void> {
-  const codeEls = root.querySelectorAll<HTMLElement>("code[class*='language-']");
+  // Target both language-tagged and untagged code blocks inside <pre>
+  const codeEls = root.querySelectorAll<HTMLElement>("pre > code");
   if (codeEls.length === 0) return;
 
   const pending: { el: HTMLElement; lang: string; code: string }[] = [];
   for (const el of codeEls) {
     if (el.dataset.highlighted) continue;
-    const match = el.className.match(/language-(\S+)/);
-    if (!match) continue;
-    const lang = match[1];
+    const langMatch = el.className.match(/language-(\S+)/);
+    let lang = langMatch ? langMatch[1] : "";
     const code = el.textContent || "";
     if (!code.trim()) continue;
+
+    // Auto-detect for untagged blocks
+    if (!lang) {
+      if (/\b(const|let|var|function|import|export|=>)\b/.test(code)) lang = "typescript";
+      else if (/\b(def |class |import |from |print\()/.test(code)) lang = "python";
+      else if (/\b(func |package |fmt\.)/.test(code)) lang = "go";
+      else continue; // skip if we can't guess
+    }
 
     const cacheKey = `${lang}:${code}`;
     const cached = highlightCache.get(cacheKey);

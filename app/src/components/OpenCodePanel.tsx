@@ -46,6 +46,7 @@ export function OpenCodePanel({
   const [deviceCode, setDeviceCode] = useState<{ providerId: string; code: string; url: string } | null>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const contextRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragging = useRef(false);
 
@@ -126,6 +127,11 @@ export function OpenCodePanel({
   useEffect(() => {
     if (messagesRef.current) highlightCodeBlocks(messagesRef.current);
   }, [messages]);
+
+  // Syntax-highlight context preview
+  useEffect(() => {
+    if (contextRef.current) highlightCodeBlocks(contextRef.current);
+  }, [attached]);
 
   // Refocus input after loading completes
   useEffect(() => {
@@ -406,7 +412,7 @@ export function OpenCodePanel({
           <div ref={messagesEnd} />
         </div>
         {attached && (
-          <div className="oc-context-preview">
+          <div className="oc-context-preview" ref={contextRef}>
             <div className="oc-context-header">
               <span className="oc-context-path">{selectionLabel(attached)}</span>
               {attached.note && <span className="oc-chip-note">note</span>}

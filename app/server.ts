@@ -555,7 +555,7 @@ Bun.serve({
         });
       }
 
-      if (pathname === "/api/highlight") {
+      if (pathname === "/api/highlight" && req.method === "GET") {
         const filePath = url.searchParams.get("path");
         if (!filePath) return new Response(JSON.stringify({ error: "Missing path" }), { status: 400, headers: { "Content-Type": "application/json" } });
         const resolved = resolve(filePath);
