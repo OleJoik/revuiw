@@ -844,7 +844,10 @@ Bun.serve({
           body: JSON.stringify(body),
         });
         if (!res.ok) return new Response(JSON.stringify({ error: "OAuth callback failed" }), { status: 502, headers: { "Content-Type": "application/json" } });
-        return new Response(JSON.stringify(await res.json()), { headers: { "Content-Type": "application/json" } });
+        const result = await res.json();
+        // Reload OpenCode instance to pick up new credentials
+        await ocFetch(`${OPENCODE_URL}/instance/dispose`, { method: "POST" }).catch(() => {});
+        return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
       }
 
       const authSetMatch = pathname.match(/^\/api\/opencode\/auth\/([^/]+)$/);
@@ -857,7 +860,9 @@ Bun.serve({
           body: JSON.stringify(body),
         });
         if (!res.ok) return new Response(JSON.stringify({ error: "Failed to set credentials" }), { status: 502, headers: { "Content-Type": "application/json" } });
-        return new Response(JSON.stringify(await res.json()), { headers: { "Content-Type": "application/json" } });
+        const result = await res.json();
+        await ocFetch(`${OPENCODE_URL}/instance/dispose`, { method: "POST" }).catch(() => {});
+        return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
       }
 
       return new Response("Not found", { status: 404 });
