@@ -1925,3 +1925,39 @@ html, body, #root {
   color: var(--fg);
   cursor: pointer;
 }
+
+/* Device code flow */
+.oc-device-code {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  text-align: center;
+}
+.oc-device-code-label {
+  font-size: 10px;
+  color: var(--fg-dim);
+  margin-bottom: 4px;
+}
+.oc-device-code-value {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 4px;
+  letter-spacing: 2px;
+  user-select: all;
+}
+.oc-device-code-value:hover {
+  opacity: 0.8;
+}
+.oc-device-code-hint {
+  font-size: 10px;
+  color: var(--fg-dim);
+  margin: 4px 0 6px;
+}
+.oc-device-code-hint a {
+  color: var(--accent);
+}

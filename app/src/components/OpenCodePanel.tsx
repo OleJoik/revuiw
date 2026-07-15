@@ -43,6 +43,7 @@ export function OpenCodePanel({
   const [providersData, setProvidersData] = useState<ProvidersData | null>(null);
   const [authMethods, setAuthMethods] = useState<Record<string, ProviderAuthMethod[]>>({});
   const [apiKeyInput, setApiKeyInput] = useState<{ providerId: string; value: string } | null>(null);
+  const [deviceCode, setDeviceCode] = useState<{ providerId: string; code: string; url: string } | null>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragging = useRef(false);
@@ -292,8 +293,15 @@ export function OpenCodePanel({
                           if (m.type === "oauth") {
                             return <button key={i} className="oc-provider-btn" onClick={async () => {
                               const result = await startOAuth(p.id, { method: i });
-                              if (result.url) window.open(result.url, "_blank");
-                              else if (result.instructions) alert(result.instructions);
+                              if (result.instructions) {
+                                // Device code flow — extract code from instructions
+                                const codeMatch = result.instructions.match(/code:\s*(\S+)/i);
+                                const code = codeMatch ? codeMatch[1] : result.instructions;
+                                setDeviceCode({ providerId: p.id, code, url: result.url || "" });
+                                if (result.url) window.open(result.url, "_blank");
+                              } else if (result.url) {
+                                window.open(result.url, "_blank");
+                              }
                             }}>{m.label}</button>;
                           }
                           if (m.type === "api") {
@@ -327,6 +335,17 @@ export function OpenCodePanel({
                           if (ok) { setApiKeyInput(null); setProvidersData(await listProviders()); }
                         }}>Save</button>
                         <button onClick={() => setApiKeyInput(null)}>Cancel</button>
+                      </div>
+                    )}
+                    {deviceCode?.providerId === p.id && (
+                      <div className="oc-device-code">
+                        <div className="oc-device-code-label">Enter this code:</div>
+                        <div className="oc-device-code-value" onClick={() => { navigator.clipboard.writeText(deviceCode.code); }}>{deviceCode.code}</div>
+                        <div className="oc-device-code-hint">
+                          Click code to copy.{" "}
+                          {deviceCode.url && <a href={deviceCode.url} target="_blank" rel="noopener noreferrer">Open GitHub</a>}
+                        </div>
+                        <button className="oc-provider-btn" onClick={async () => { setDeviceCode(null); setProvidersData(await listProviders()); }}>Done</button>
                       </div>
                     )}
                   </div>
