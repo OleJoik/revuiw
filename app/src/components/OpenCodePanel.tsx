@@ -313,7 +313,10 @@ export function OpenCodePanel({
                                 waitOAuthCallback(p.id, i).then(async (ok) => {
                                   console.log("OAuth callback done:", ok);
                                   setDeviceCode(null);
+                                  // Wait for instance dispose to complete
+                                  await new Promise(r => setTimeout(r, 2000));
                                   setProvidersData(await listProviders());
+                                  listModels().then(setModels).catch(() => {});
                                 });
                               }
                               if (result.url && !result.instructions) {
@@ -340,8 +343,8 @@ export function OpenCodePanel({
                               const ok = await setProviderCredentials(p.id, { type: "api", key: apiKeyInput.value.trim() });
                               if (ok) {
                                 setApiKeyInput(null);
-                                const fresh = await listProviders();
-                                setProvidersData(fresh);
+                                setProvidersData(await listProviders());
+                                listModels().then(setModels).catch(() => {});
                               }
                             } else if (e.key === "Escape") setApiKeyInput(null);
                           }}
@@ -349,7 +352,7 @@ export function OpenCodePanel({
                         <button onClick={async () => {
                           if (!apiKeyInput.value.trim()) return;
                           const ok = await setProviderCredentials(p.id, { type: "api", key: apiKeyInput.value.trim() });
-                          if (ok) { setApiKeyInput(null); setProvidersData(await listProviders()); }
+                          if (ok) { setApiKeyInput(null); setProvidersData(await listProviders()); listModels().then(setModels).catch(() => {}); }
                         }}>Save</button>
                         <button onClick={() => setApiKeyInput(null)}>Cancel</button>
                       </div>
