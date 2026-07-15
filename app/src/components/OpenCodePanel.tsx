@@ -31,7 +31,9 @@ export function OpenCodePanel({
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [attached, setAttached] = useState<SelectionContext | null>(null);
+  const [attached, setAttached] = useState<SelectionContext | null>(() => {
+    try { const v = localStorage.getItem("revuiw:oc:attached"); return v ? JSON.parse(v) : null; } catch { return null; }
+  });
   const [loading, setLoading] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -85,7 +87,19 @@ export function OpenCodePanel({
   // Load sessions, models, and agent defaults when opened
   useEffect(() => {
     if (!open) return;
-    listSessions().then(setSessions).catch(() => setSessions([]));
+    listSessions().then(list => {
+      setSessions(list);
+      // Restore last session from localStorage
+      if (!currentSession) {
+        try {
+          const savedId = localStorage.getItem("revuiw:oc:sessionId");
+          if (savedId) {
+            const found = list.find((s: Session) => s.id === savedId);
+            if (found) selectSession(found);
+          }
+        } catch {}
+      }
+    }).catch(() => setSessions([]));
     listModels().then(setModels).catch(() => {});
     listAgents().then(setAgents).catch(() => {});
     getConfig().then(cfg => {
@@ -97,9 +111,10 @@ export function OpenCodePanel({
     }).catch(() => {});
   }, [open]);
 
-  // Report the active main-session id upward so popovers know what to fork
+  // Report the active main-session id upward + persist to localStorage
   useEffect(() => {
     onSessionChange(currentSession?.id ?? null);
+    try { if (currentSession?.id) localStorage.setItem("revuiw:oc:sessionId", currentSession.id); else localStorage.removeItem("revuiw:oc:sessionId"); } catch {}
   }, [currentSession, onSessionChange]);
 
   // Adopt a selection sent from the Viewer as an attached context chip
@@ -128,9 +143,10 @@ export function OpenCodePanel({
     if (messagesRef.current) highlightCodeBlocks(messagesRef.current);
   }, [messages]);
 
-  // Syntax-highlight context preview
+  // Syntax-highlight context preview + persist attached context
   useEffect(() => {
     if (contextRef.current) highlightCodeBlocks(contextRef.current);
+    try { if (attached) localStorage.setItem("revuiw:oc:attached", JSON.stringify(attached)); else localStorage.removeItem("revuiw:oc:attached"); } catch {}
   }, [attached]);
 
   // Refocus input after loading completes
