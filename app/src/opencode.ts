@@ -184,10 +184,9 @@ export async function sendPrompt({ sessionId, message, agent, context }: SendPro
 
 // Human-readable label for a selection chip, e.g. "server.ts:10-24".
 export function selectionLabel(ctx: SelectionContext): string {
-  const name = ctx.path.split("/").pop() || ctx.path;
   return ctx.startLine === ctx.endLine
-    ? `${name}:${ctx.startLine}`
-    : `${name}:${ctx.startLine}-${ctx.endLine}`;
+    ? `${ctx.path}:${ctx.startLine}`
+    : `${ctx.path}:${ctx.startLine}-${ctx.endLine}`;
 }
 
 // --- Provider management ---

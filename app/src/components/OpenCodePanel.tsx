@@ -373,7 +373,6 @@ export function OpenCodePanel({
             const reasoningParts = verbose ? parts.filter(p => p.type === "reasoning").map(p => p.text).join("") : "";
             const toolParts = verbose ? parts.filter(p => p.type === "tool") : [];
             if (!textParts.trim() && !reasoningParts.trim() && toolParts.length === 0) return null;
-            const isAssistant = role === "assistant";
             return (
               <div key={i} className={`oc-msg ${role}`}>
                 {reasoningParts.trim() && (
@@ -388,14 +387,12 @@ export function OpenCodePanel({
                     {tp.state?.output && <pre className="oc-tool-output">{tp.state.output.slice(0, 500)}</pre>}
                   </details>
                 ))}
-                {textParts.trim() && (isAssistant ? (
+                {textParts.trim() && (
                   <div
                     className="oc-markdown"
                     dangerouslySetInnerHTML={{ __html: renderMarkdown(textParts.trim()) }}
                   />
-                ) : (
-                  textParts.trim()
-                ))}
+                )}
               </div>
             );
           })}
