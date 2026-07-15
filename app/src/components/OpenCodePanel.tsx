@@ -400,12 +400,13 @@ export function OpenCodePanel({
           <div ref={messagesEnd} />
         </div>
         {attached && (
-          <div className="oc-chip-row">
-            <span className="oc-chip" title={attached.note ? `${attached.path}\n\nNote: ${attached.note}` : attached.path}>
-              <span className="oc-chip-label">{selectionLabel(attached)}</span>
-              {attached.note && <span className="oc-chip-note" title="Includes note comment">note</span>}
+          <div className="oc-context-preview">
+            <div className="oc-context-header">
+              <span className="oc-context-path">{selectionLabel(attached)}</span>
+              {attached.note && <span className="oc-chip-note">note</span>}
               <button className="oc-chip-remove" onClick={() => setAttached(null)} title="Remove context">&times;</button>
-            </span>
+            </div>
+            <pre className="oc-context-code"><code>{attached.text}</code></pre>
           </div>
         )}
         <div className="oc-input-row">

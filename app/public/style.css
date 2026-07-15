@@ -1270,6 +1270,45 @@ html, body, #root {
   flex-shrink: 0;
 }
 
+/* Context preview above input */
+.oc-context-preview {
+  margin: 4px 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.oc-context-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-hover);
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+}
+.oc-context-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  font-family: monospace;
+}
+.oc-context-code {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  max-height: 120px;
+  overflow: auto;
+  color: var(--fg);
+  white-space: pre;
+  font-family: monospace;
+}
+
 .oc-chip {
   display: inline-flex;
   align-items: center;
