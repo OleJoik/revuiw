@@ -125,6 +125,7 @@ export function OpenCodePanel({
 
   // Report the active main-session id upward + persist to localStorage
   useEffect(() => {
+    console.log("[revuiw] session changed:", currentSession?.id, currentSession);
     onSessionChange(currentSession?.id ?? null);
     try { if (currentSession?.id) localStorage.setItem("revuiw:oc:sessionId", currentSession.id); else localStorage.removeItem("revuiw:oc:sessionId"); } catch {}
   }, [currentSession, onSessionChange]);
