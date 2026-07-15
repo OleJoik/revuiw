@@ -89,15 +89,16 @@ export function OpenCodePanel({
     if (!open) return;
     listSessions().then(list => {
       setSessions(list);
-      // Restore last session from localStorage
+      // Restore last session from localStorage if we haven't selected one yet
       if (!currentSession) {
-        try {
-          const savedId = localStorage.getItem("revuiw:oc:sessionId");
-          if (savedId) {
-            const found = list.find((s: Session) => s.id === savedId);
-            if (found) selectSession(found);
+        const savedId = localStorage.getItem("revuiw:oc:sessionId");
+        if (savedId) {
+          const found = (Array.isArray(list) ? list : []).find((s: Session) => s.id === savedId);
+          if (found) {
+            setCurrentSession(found);
+            getMessages(found.id).then(setMessages).catch(() => {});
           }
-        } catch {}
+        }
       }
     }).catch(() => setSessions([]));
     listModels().then(setModels).catch(() => {});
