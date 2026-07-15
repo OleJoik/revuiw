@@ -369,7 +369,7 @@ export function OpenCodePanel({
           {messages.map((msg, i) => {
             const role = msg.info?.role || "unknown";
             const parts = msg.parts || [];
-            const textParts = parts.filter(p => p.type === "text").map(p => p.text).join("");
+            const textParts = parts.filter(p => p.type === "text").map(p => p.text).join("\n\n");
             const reasoningParts = verbose ? parts.filter(p => p.type === "reasoning").map(p => p.text).join("") : "";
             const toolParts = verbose ? parts.filter(p => p.type === "tool") : [];
             if (!textParts.trim() && !reasoningParts.trim() && toolParts.length === 0) return null;
