@@ -790,9 +790,35 @@ Bun.serve({
       }
 
       if (pathname === "/api/opencode/models" && req.method === "GET") {
-        const { data, error } = await ocV2.v2.model.list();
-        if (error) return new Response(JSON.stringify({ error: "Failed to list models" }), { status: 502, headers: { "Content-Type": "application/json" } });
-        return new Response(JSON.stringify(data), {
+        // Merge models from /api/model (active) and /config/providers (all connected)
+        const [apiRes, provRes, provListRes] = await Promise.all([
+          ocV2.v2.model.list(),
+          ocFetch(`${OPENCODE_URL}/config/providers`).then(r => r.ok ? r.json() : null).catch(() => null),
+          ocFetch(`${OPENCODE_URL}/provider`).then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        const models: Record<string, any> = {};
+        // Add models from /api/model
+        if (apiRes.data) {
+          for (const m of Array.isArray(apiRes.data) ? apiRes.data : Object.values(apiRes.data)) {
+            const key = `${(m as any).providerID}/${(m as any).id}`;
+            models[key] = m;
+          }
+        }
+        // Add models from connected providers in /config/providers
+        const connected: string[] = provListRes?.connected || [];
+        if (provRes?.providers) {
+          for (const prov of provRes.providers) {
+            if (!connected.includes(prov.id)) continue;
+            if (!prov.models) continue;
+            for (const [modelId, modelData] of Object.entries(prov.models)) {
+              const key = `${prov.id}/${modelId}`;
+              if (!models[key]) {
+                models[key] = { id: modelId, providerID: prov.id, name: (modelData as any).name || modelId, ...(modelData as any) };
+              }
+            }
+          }
+        }
+        return new Response(JSON.stringify(Object.values(models)), {
           headers: { "Content-Type": "application/json" },
         });
       }
