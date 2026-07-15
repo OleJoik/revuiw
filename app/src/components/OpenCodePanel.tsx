@@ -92,11 +92,22 @@ export function OpenCodePanel({
       // Restore last session from localStorage if we haven't selected one yet
       if (!currentSession) {
         const savedId = localStorage.getItem("revuiw:oc:sessionId");
+        console.log("[revuiw] restore session: savedId=", savedId, "list=", list?.length ?? list);
         if (savedId) {
           const found = (Array.isArray(list) ? list : []).find((s: Session) => s.id === savedId);
+          console.log("[revuiw] found in list:", !!found);
           if (found) {
             setCurrentSession(found);
             getMessages(found.id).then(setMessages).catch(() => {});
+          } else {
+            // Session might exist but not in list — try loading messages directly
+            getMessages(savedId).then(msgs => {
+              console.log("[revuiw] direct load msgs:", msgs?.length);
+              if (msgs.length > 0) {
+                setCurrentSession({ id: savedId });
+                setMessages(msgs);
+              }
+            }).catch(() => {});
           }
         }
       }
