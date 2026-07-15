@@ -91,8 +91,16 @@ await initHighlighter();
 
 // --- OpenCode SDK client ---
 const OPENCODE_URL = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
-const opencode = createOpencodeClient({ baseUrl: OPENCODE_URL });
-const ocV2 = createOpencodeV2Client({ baseUrl: OPENCODE_URL });
+const OC_AUTH_HEADER = (() => {
+  const u = process.env.OPENCODE_SERVER_USERNAME;
+  const p = process.env.OPENCODE_SERVER_PASSWORD;
+  if (u && p) return "Basic " + Buffer.from(`${u}:${p}`).toString("base64");
+  return "";
+})();
+const ocFetch = (url: string, init?: RequestInit) =>
+  fetch(url, { ...init, headers: { ...((init?.headers as Record<string, string>) || {}), ...(OC_AUTH_HEADER ? { Authorization: OC_AUTH_HEADER } : {}) } });
+const opencode = createOpencodeClient({ baseUrl: OPENCODE_URL, ...(OC_AUTH_HEADER ? { headers: { Authorization: OC_AUTH_HEADER } } : {}) });
+const ocV2 = createOpencodeV2Client({ baseUrl: OPENCODE_URL, ...(OC_AUTH_HEADER ? { headers: { Authorization: OC_AUTH_HEADER } } : {}) });
 
 interface SelectionContext {
   path: string;
@@ -683,7 +691,7 @@ Bun.serve({
       // --- OpenCode API endpoints ---
 
       if (pathname === "/api/opencode/config" && req.method === "GET") {
-        const res = await fetch(`${OPENCODE_URL}/config`);
+        const res = await ocFetch(`${OPENCODE_URL}/config`);
         if (!res.ok) return new Response(JSON.stringify({ error: "Failed to get config" }), { status: 502, headers: { "Content-Type": "application/json" } });
         const data = await res.json();
         return new Response(JSON.stringify(data), {
@@ -692,7 +700,7 @@ Bun.serve({
       }
 
       if (pathname === "/api/opencode/config/providers" && req.method === "GET") {
-        const res = await fetch(`${OPENCODE_URL}/config/providers`);
+        const res = await ocFetch(`${OPENCODE_URL}/config/providers`);
         if (!res.ok) return new Response(JSON.stringify({ error: "Failed to get providers" }), { status: 502, headers: { "Content-Type": "application/json" } });
         const data = await res.json();
         return new Response(JSON.stringify(data), {
@@ -701,7 +709,7 @@ Bun.serve({
       }
 
       if (pathname === "/api/opencode/agents" && req.method === "GET") {
-        const res = await fetch(`${OPENCODE_URL}/api/agent`);
+        const res = await ocFetch(`${OPENCODE_URL}/api/agent`);
         if (!res.ok) return new Response(JSON.stringify({ error: "Failed to list agents" }), { status: 502, headers: { "Content-Type": "application/json" } });
         const data = await res.json();
         return new Response(JSON.stringify(data), {
@@ -774,7 +782,7 @@ Bun.serve({
       const sessionDeleteMatch = pathname.match(/^\/api\/opencode\/sessions\/([^/]+)$/);
       if (sessionDeleteMatch && req.method === "DELETE") {
         const sessionId = sessionDeleteMatch[1];
-        const res = await fetch(`${OPENCODE_URL}/session/${sessionId}`, { method: "DELETE" });
+        const res = await ocFetch(`${OPENCODE_URL}/session/${sessionId}`, { method: "DELETE" });
         if (!res.ok) return new Response(JSON.stringify({ error: "Failed to delete session" }), { status: 502, headers: { "Content-Type": "application/json" } });
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json" },
@@ -798,6 +806,45 @@ Bun.serve({
         return new Response(JSON.stringify(data ?? { ok: true }), {
           headers: { "Content-Type": "application/json" },
         });
+      }
+
+      // --- Provider management endpoints ---
+      if (pathname === "/api/opencode/providers" && req.method === "GET") {
+        const res = await ocFetch(`${OPENCODE_URL}/provider`);
+        if (!res.ok) return new Response(JSON.stringify({ error: "Failed to list providers" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(await res.json()), { headers: { "Content-Type": "application/json" } });
+      }
+
+      if (pathname === "/api/opencode/providers/auth" && req.method === "GET") {
+        const res = await ocFetch(`${OPENCODE_URL}/provider/auth`);
+        if (!res.ok) return new Response(JSON.stringify({ error: "Failed to get auth methods" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(await res.json()), { headers: { "Content-Type": "application/json" } });
+      }
+
+      const oauthMatch = pathname.match(/^\/api\/opencode\/providers\/([^/]+)\/oauth$/);
+      if (oauthMatch && req.method === "POST") {
+        const providerId = oauthMatch[1];
+        const body = await req.json();
+        const res = await ocFetch(`${OPENCODE_URL}/provider/${providerId}/oauth/authorize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) return new Response(JSON.stringify({ error: "OAuth failed" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(await res.json()), { headers: { "Content-Type": "application/json" } });
+      }
+
+      const authSetMatch = pathname.match(/^\/api\/opencode\/auth\/([^/]+)$/);
+      if (authSetMatch && req.method === "PUT") {
+        const providerId = authSetMatch[1];
+        const body = await req.json();
+        const res = await ocFetch(`${OPENCODE_URL}/auth/${providerId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) return new Response(JSON.stringify({ error: "Failed to set credentials" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(await res.json()), { headers: { "Content-Type": "application/json" } });
       }
 
       return new Response("Not found", { status: 404 });

@@ -1842,3 +1842,86 @@ html, body, #root {
   background: var(--border);
   border-radius: 3px;
 }
+
+/* --- Providers panel --- */
+.oc-providers-panel {
+  border-bottom: 1px solid var(--border);
+  max-height: 260px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 4px 8px;
+}
+.oc-providers-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-dim);
+  padding: 2px 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.oc-provider-item {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.oc-provider-item:last-child { border-bottom: none; }
+.oc-provider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.oc-provider-name {
+  font-size: 12px;
+  color: var(--fg);
+}
+.oc-provider-status {
+  font-size: 10px;
+  color: var(--fg-dim);
+}
+.oc-provider-status.ok {
+  color: #4caf50;
+  font-weight: 600;
+}
+.oc-provider-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.oc-provider-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.oc-provider-btn:hover {
+  background: var(--bg-hover);
+}
+.oc-provider-key-input {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  align-items: center;
+}
+.oc-provider-key-input input {
+  flex: 1;
+  font-size: 11px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.oc-provider-key-input button {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}

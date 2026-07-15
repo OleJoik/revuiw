@@ -53,8 +53,28 @@ export async function listSessions(): Promise<Session[]> {
 
 export interface OpenCodeConfig {
   model?: string;
+  default_agent?: string;
   agent?: Record<string, { model?: string }>;
   mode?: Record<string, { model?: string }>;
+}
+
+export async function getConfig(): Promise<OpenCodeConfig> {
+  return json(await fetch(`${BASE}/config`), {});
+}
+
+// Resolve the effective default model string from config
+export function resolveDefaultModel(cfg: OpenCodeConfig): string | null {
+  if (cfg.model) return cfg.model;
+  const agents = cfg.agent;
+  if (agents) {
+    const defaultAgent = cfg.default_agent || "plan";
+    if (agents[defaultAgent]?.model) return agents[defaultAgent].model!;
+    // fallback: first agent with a model
+    for (const a of Object.values(agents)) {
+      if (a.model) return a.model;
+    }
+  }
+  return cfg.mode?.plan?.model || null;
 }
 
 export async function getConfig(): Promise<OpenCodeConfig> {
@@ -168,4 +188,51 @@ export function selectionLabel(ctx: SelectionContext): string {
   return ctx.startLine === ctx.endLine
     ? `${name}:${ctx.startLine}`
     : `${name}:${ctx.startLine}-${ctx.endLine}`;
+}
+
+// --- Provider management ---
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  env?: string[];
+  models?: Record<string, { id: string; name?: string }>;
+}
+
+export interface ProviderAuthMethod {
+  type: "oauth" | "api";
+  label: string;
+  prompts?: Array<{ type: string; key: string; message: string; placeholder?: string; options?: Array<{ label: string; value: string }>; when?: unknown }>;
+}
+
+export interface ProvidersData {
+  all: ProviderInfo[];
+  connected: string[];
+  default?: Record<string, string>;
+}
+
+export async function listProviders(): Promise<ProvidersData> {
+  return json(await fetch(`${BASE}/providers`), { all: [], connected: [] });
+}
+
+export async function getProviderAuthMethods(): Promise<Record<string, ProviderAuthMethod[]>> {
+  return json(await fetch(`${BASE}/providers/auth`), {});
+}
+
+export async function startOAuth(providerId: string, body: Record<string, unknown> = {}): Promise<{ url?: string; method?: string; instructions?: string }> {
+  const res = await fetch(`${BASE}/providers/${providerId}/oauth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return json(res, {});
+}
+
+export async function setProviderCredentials(providerId: string, body: Record<string, unknown>): Promise<boolean> {
+  const res = await fetch(`${BASE}/auth/${providerId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.ok;
 }

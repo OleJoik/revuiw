@@ -3,8 +3,10 @@ import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick } from "../markdown";
 import {
   listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
-  listModels, switchModel, listAgents, getConfigProviders,
+  listModels, switchModel, listAgents, getConfig, resolveDefaultModel,
+  listProviders, getProviderAuthMethods, startOAuth, setProviderCredentials,
   type Session, type Message, type Agent, type SelectionContext, type ModelInfo, type AgentInfo,
+  type ProvidersData, type ProviderAuthMethod,
 } from "../opencode";
 
 interface Props {
@@ -35,9 +37,12 @@ export function OpenCodePanel({
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
-  const [agentDefaults, setAgentDefaults] = useState<Record<string, string>>({});
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [verbose, setVerbose] = useSetting("oc:verbose", false);
+  const [showProviders, setShowProviders] = useState(false);
+  const [providersData, setProvidersData] = useState<ProvidersData | null>(null);
+  const [authMethods, setAuthMethods] = useState<Record<string, ProviderAuthMethod[]>>({});
+  const [apiKeyInput, setApiKeyInput] = useState<{ providerId: string; value: string } | null>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragging = useRef(false);
@@ -80,21 +85,14 @@ export function OpenCodePanel({
     listSessions().then(setSessions).catch(() => setSessions([]));
     listModels().then(setModels).catch(() => {});
     listAgents().then(setAgents).catch(() => {});
-    getConfigProviders().then(cfg => {
-      if (cfg.default) setAgentDefaults(cfg.default);
+    getConfig().then(cfg => {
+      const model = resolveDefaultModel(cfg);
+      if (model) {
+        const modelId = model.includes("/") ? model.split("/").slice(1).join("/") : model;
+        setDefaultModel(modelId);
+      }
     }).catch(() => {});
   }, [open]);
-
-  // Resolve default model from config/providers defaults map
-  useEffect(() => {
-    const key = agent; // "plan" or "build"
-    const modelStr = agentDefaults[key] || agentDefaults["plan"] || Object.values(agentDefaults)[0];
-    if (modelStr) {
-      // Format is "provider/model" - show just the model part
-      const modelId = modelStr.includes("/") ? modelStr.split("/").slice(1).join("/") : modelStr;
-      setDefaultModel(modelId);
-    }
-  }, [agentDefaults, agent]);
 
   // Report the active main-session id upward so popovers know what to fork
   useEffect(() => {
@@ -215,6 +213,7 @@ export function OpenCodePanel({
           </span>
         )}
         <div className="oc-header-actions">
+          <button className="oc-new-btn" onClick={async () => { setShowProviders(!showProviders); setShowSessions(false); setShowModelPicker(false); if (!providersData) { const [p, a] = await Promise.all([listProviders(), getProviderAuthMethods()]); setProvidersData(p); setAuthMethods(a); } }} title="Providers">&#9889;</button>
           <button className="oc-new-btn" onClick={() => { setCurrentSession(null); setMessages([]); setShowSessions(false); }} title="New session">+</button>
           <button className="oc-close" onClick={onToggle}>&times;</button>
         </div>
@@ -264,6 +263,76 @@ export function OpenCodePanel({
               <span className="oc-model-item-provider">{m.providerID}</span>
             </div>
           ))}
+        </div>
+      )}
+      {showProviders && providersData && (
+        <div className="oc-providers-panel">
+          <div className="oc-providers-header">Providers</div>
+          <div className="oc-providers-list">
+            {providersData.all
+              .filter(p => authMethods[p.id]?.length > 0)
+              .sort((a, b) => {
+                const ac = providersData.connected.includes(a.id) ? 0 : 1;
+                const bc = providersData.connected.includes(b.id) ? 0 : 1;
+                return ac - bc || a.name.localeCompare(b.name);
+              })
+              .slice(0, 30)
+              .map(p => {
+                const connected = providersData.connected.includes(p.id);
+                const methods = authMethods[p.id] || [];
+                return (
+                  <div key={p.id} className={`oc-provider-item ${connected ? "connected" : ""}`}>
+                    <div className="oc-provider-row">
+                      <span className="oc-provider-name">{p.name}</span>
+                      <span className={`oc-provider-status ${connected ? "ok" : ""}`}>{connected ? "connected" : "—"}</span>
+                    </div>
+                    {!connected && (
+                      <div className="oc-provider-actions">
+                        {methods.map((m, i) => {
+                          if (m.type === "oauth") {
+                            return <button key={i} className="oc-provider-btn" onClick={async () => {
+                              const result = await startOAuth(p.id, { method: i });
+                              if (result.url) window.open(result.url, "_blank");
+                              else if (result.instructions) alert(result.instructions);
+                            }}>{m.label}</button>;
+                          }
+                          if (m.type === "api") {
+                            return <button key={i} className="oc-provider-btn" onClick={() => setApiKeyInput({ providerId: p.id, value: "" })}>{m.label}</button>;
+                          }
+                          return null;
+                        })}
+                      </div>
+                    )}
+                    {apiKeyInput?.providerId === p.id && (
+                      <div className="oc-provider-key-input">
+                        <input
+                          type="password"
+                          placeholder="API key..."
+                          value={apiKeyInput.value}
+                          onChange={e => setApiKeyInput({ ...apiKeyInput, value: e.target.value })}
+                          onKeyDown={async e => {
+                            if (e.key === "Enter" && apiKeyInput.value.trim()) {
+                              const ok = await setProviderCredentials(p.id, { type: "api", key: apiKeyInput.value.trim() });
+                              if (ok) {
+                                setApiKeyInput(null);
+                                const fresh = await listProviders();
+                                setProvidersData(fresh);
+                              }
+                            } else if (e.key === "Escape") setApiKeyInput(null);
+                          }}
+                        />
+                        <button onClick={async () => {
+                          if (!apiKeyInput.value.trim()) return;
+                          const ok = await setProviderCredentials(p.id, { type: "api", key: apiKeyInput.value.trim() });
+                          if (ok) { setApiKeyInput(null); setProvidersData(await listProviders()); }
+                        }}>Save</button>
+                        <button onClick={() => setApiKeyInput(null)}>Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
         </div>
       )}
       <div className="oc-chat">
