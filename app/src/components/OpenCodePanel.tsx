@@ -123,7 +123,9 @@ export function OpenCodePanel({
   // Report the active main-session id upward + persist to localStorage
   useEffect(() => {
     onSessionChange(currentSession?.id ?? null);
-    try { if (currentSession?.id) localStorage.setItem("revuiw:oc:sessionId", currentSession.id); else localStorage.removeItem("revuiw:oc:sessionId"); } catch {}
+    if (currentSession?.id) {
+      try { localStorage.setItem("revuiw:oc:sessionId", currentSession.id); } catch {}
+    }
   }, [currentSession, onSessionChange]);
 
   // Adopt a selection sent from the Viewer as an attached context chip
@@ -252,7 +254,7 @@ export function OpenCodePanel({
         )}
         <div className="oc-header-actions">
           <button className="oc-new-btn" onClick={async () => { setShowProviders(!showProviders); setShowSessions(false); setShowModelPicker(false); if (!providersData) { const [p, a] = await Promise.all([listProviders(), getProviderAuthMethods()]); setProvidersData(p); setAuthMethods(a); } }} title="Providers">&#9889;</button>
-          <button className="oc-new-btn" onClick={() => { setCurrentSession(null); setMessages([]); setShowSessions(false); }} title="New session">+</button>
+          <button className="oc-new-btn" onClick={() => { setCurrentSession(null); setMessages([]); setShowSessions(false); localStorage.removeItem("revuiw:oc:sessionId"); }} title="New session">+</button>
           <button className="oc-close" onClick={onToggle}>&times;</button>
         </div>
       </div>
