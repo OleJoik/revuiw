@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSetting } from "../hooks";
-import { renderMarkdown, handleCopyClick } from "../markdown";
+import { renderMarkdown, handleCopyClick, highlightCodeBlocks } from "../markdown";
 import {
   listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
   listModels, switchModel, listAgents, getConfig, resolveDefaultModel,
@@ -45,6 +45,7 @@ export function OpenCodePanel({
   const [apiKeyInput, setApiKeyInput] = useState<{ providerId: string; value: string } | null>(null);
   const [deviceCode, setDeviceCode] = useState<{ providerId: string; code: string; url: string } | null>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragging = useRef(false);
 
@@ -119,6 +120,11 @@ export function OpenCodePanel({
   // Scroll to bottom
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Syntax-highlight code blocks after render
+  useEffect(() => {
+    if (messagesRef.current) highlightCodeBlocks(messagesRef.current);
   }, [messages]);
 
   // Refocus input after loading completes
@@ -364,7 +370,7 @@ export function OpenCodePanel({
         </div>
       )}
       <div className="oc-chat">
-        <div className="oc-messages" onClick={handleCopyClick}>
+        <div className="oc-messages" ref={messagesRef} onClick={handleCopyClick}>
           {messages.length === 0 && <div className="oc-empty">Send a message to start</div>}
           {messages.map((msg, i) => {
             const role = msg.info?.role || "unknown";
@@ -406,7 +412,10 @@ export function OpenCodePanel({
               {attached.note && <span className="oc-chip-note">note</span>}
               <button className="oc-chip-remove" onClick={() => setAttached(null)} title="Remove context">&times;</button>
             </div>
-            <pre className="oc-context-code"><code>{attached.text}</code></pre>
+            <div
+              className="oc-context-code oc-markdown"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown("```" + (attached.lang || "") + "\n" + attached.text + "\n```") }}
+            />
           </div>
         )}
         <div className="oc-input-row">

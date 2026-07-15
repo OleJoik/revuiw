@@ -1299,14 +1299,16 @@ html, body, #root {
 }
 .oc-context-code {
   margin: 0;
-  padding: 6px 8px;
-  font-size: 11px;
-  line-height: 1.4;
   max-height: 120px;
   overflow: auto;
-  color: var(--fg);
-  white-space: pre;
-  font-family: monospace;
+}
+.oc-context-code .oc-code-wrap {
+  margin: 0;
+}
+.oc-context-code pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
 }
 
 .oc-chip {

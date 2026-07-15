@@ -89,6 +89,10 @@ function tokenizeCode(code: string, lang: string | null): Token[][] | null {
 // Initialize highlighter before starting server
 await initHighlighter();
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 // --- OpenCode SDK client ---
 const OPENCODE_URL = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
 const OC_AUTH_HEADER = (() => {
@@ -706,6 +710,24 @@ Bun.serve({
         return new Response(JSON.stringify(data), {
           headers: { "Content-Type": "application/json" },
         });
+      }
+
+      // --- Syntax highlighting endpoint ---
+      if (pathname === "/api/highlight" && req.method === "POST") {
+        try {
+          const body = await req.json();
+          const { code, lang } = body as { code: string; lang: string };
+          if (!code || !lang) return new Response(JSON.stringify({ html: null }), { headers: { "Content-Type": "application/json" } });
+          const tokens = tokenizeCode(code, SUPPORTED_LANGS.includes(lang) ? lang : null);
+          if (!tokens) return new Response(JSON.stringify({ html: null }), { headers: { "Content-Type": "application/json" } });
+          // Build HTML spans from tokens
+          const html = tokens.map(line =>
+            line.map(t => `<span style="color:${t.color}">${escapeHtml(t.content)}</span>`).join("")
+          ).join("\n");
+          return new Response(JSON.stringify({ html }), { headers: { "Content-Type": "application/json" } });
+        } catch {
+          return new Response(JSON.stringify({ html: null }), { headers: { "Content-Type": "application/json" } });
+        }
       }
 
       if (pathname === "/api/opencode/agents" && req.method === "GET") {

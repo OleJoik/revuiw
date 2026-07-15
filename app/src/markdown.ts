@@ -37,3 +37,55 @@ export function handleCopyClick(e: React.MouseEvent): void {
   target.textContent = "Copied";
   setTimeout(() => { target.textContent = "Copy"; }, 1500);
 }
+
+// --- Client-side syntax highlighting via server-side shiki ---
+
+const highlightCache = new Map<string, string>();
+
+/**
+ * Find all <code class="language-xxx"> blocks inside `root` that haven't been
+ * highlighted yet, send them to the server for shiki tokenization, and replace
+ * their innerHTML with highlighted spans.
+ */
+export async function highlightCodeBlocks(root: HTMLElement): Promise<void> {
+  const codeEls = root.querySelectorAll<HTMLElement>("code[class*='language-']");
+  if (codeEls.length === 0) return;
+
+  const pending: { el: HTMLElement; lang: string; code: string }[] = [];
+  for (const el of codeEls) {
+    if (el.dataset.highlighted) continue;
+    const match = el.className.match(/language-(\S+)/);
+    if (!match) continue;
+    const lang = match[1];
+    const code = el.textContent || "";
+    if (!code.trim()) continue;
+
+    const cacheKey = `${lang}:${code}`;
+    const cached = highlightCache.get(cacheKey);
+    if (cached) {
+      el.innerHTML = cached;
+      el.dataset.highlighted = "1";
+      continue;
+    }
+    pending.push({ el, lang, code });
+  }
+
+  // Batch requests (fire all in parallel, cap at 10 concurrent)
+  const batch = pending.slice(0, 20);
+  await Promise.all(batch.map(async ({ el, lang, code }) => {
+    try {
+      const res = await fetch("/api/highlight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, lang }),
+      });
+      const data = await res.json();
+      if (data.html) {
+        const cacheKey = `${lang}:${code}`;
+        highlightCache.set(cacheKey, data.html);
+        el.innerHTML = data.html;
+      }
+    } catch { /* ignore */ }
+    el.dataset.highlighted = "1";
+  }));
+}
