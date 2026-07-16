@@ -170,6 +170,19 @@ export function OpenCodePanel({
     if (focused && open && !loading) inputRef.current?.focus();
   }, [focused]);
 
+  // While the OpenCode panel is active, Tab toggles the agent mode instead of
+  // moving browser focus.
+  useEffect(() => {
+    if (!focused || !open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      setAgent(prev => prev === "plan" ? "build" : "plan");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focused, open, setAgent]);
+
   const createNewSession = async (title?: string) => {
     const session = await createSession(title);
     if (!session) return null;
@@ -287,6 +300,11 @@ export function OpenCodePanel({
           </span>
         )}
         <div className="oc-header-actions">
+          <button
+            className={`oc-verbose-toggle ${verbose ? "active" : ""}`}
+            onClick={() => setVerbose(!verbose)}
+            title={verbose ? "Hide thinking & tools" : "Show thinking & tools"}
+          >{verbose ? "V" : "v"}</button>
           <button className="oc-new-btn" onClick={async () => { setShowProviders(!showProviders); setShowSessions(false); setShowModelPicker(false); if (!providersData) { const [p, a] = await Promise.all([listProviders(), getProviderAuthMethods()]); setProvidersData(p); setAuthMethods(a); } }} title="Providers">&#9889;</button>
           <button className="oc-new-btn" onClick={() => { setCurrentSession(null); setMessages([]); setShowSessions(false); localStorage.removeItem("revuiw:oc:sessionId"); }} title="New session">+</button>
           <button className="oc-close" onClick={onToggle}>&times;</button>
@@ -490,11 +508,6 @@ export function OpenCodePanel({
             <button className={agent === "plan" ? "active" : ""} onClick={() => setAgent("plan")}>Plan</button>
             <button className={agent === "build" ? "active" : ""} onClick={() => setAgent("build")}>Do</button>
           </div>
-          <button
-            className={`oc-verbose-toggle ${verbose ? "active" : ""}`}
-            onClick={() => setVerbose(!verbose)}
-            title={verbose ? "Hide thinking & tools" : "Show thinking & tools"}
-          >{verbose ? "V" : "v"}</button>
           <input
             ref={inputRef}
             type="text"
