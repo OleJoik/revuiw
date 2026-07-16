@@ -775,20 +775,35 @@ Bun.serve({
           return new Response(JSON.stringify({ error: "Empty prompt" }), { status: 400, headers: { "Content-Type": "application/json" } });
         }
 
-        // Use promptAsync + SSE event stream for real-time streaming
-        const { error: promptError } = await opencode.session.promptAsync({
-          path: { id: sessionId },
-          body: {
-            ...(body.agent ? { agent: body.agent } : {}),
-            parts,
-          },
-        });
-        if (promptError) {
-          return new Response(JSON.stringify({ error: "Failed to send prompt" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        // Subscribe to the event stream BEFORE sending the prompt to avoid
+        // race conditions where early events are missed.
+        let stream: AsyncIterable<unknown>;
+        try {
+          const eventResult = await opencode.global.event();
+          stream = eventResult.stream;
+        } catch (err) {
+          console.error("Failed to connect to OpenCode event stream:", err);
+          return new Response(JSON.stringify({ error: "Cannot connect to OpenCode event stream" }), { status: 502, headers: { "Content-Type": "application/json" } });
         }
 
-        // Subscribe to the event stream and forward relevant events as SSE
-        const { stream } = await opencode.event();
+        // Use promptAsync + SSE event stream for real-time streaming
+        try {
+          const { error: promptError } = await opencode.session.promptAsync({
+            path: { id: sessionId },
+            body: {
+              ...(body.agent ? { agent: body.agent } : {}),
+              parts,
+            },
+          });
+          if (promptError) {
+            console.error("promptAsync returned error:", promptError);
+            return new Response(JSON.stringify({ error: "Failed to send prompt" }), { status: 502, headers: { "Content-Type": "application/json" } });
+          }
+        } catch (err) {
+          console.error("promptAsync threw:", err);
+          return new Response(JSON.stringify({ error: "Failed to send prompt to OpenCode" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        }
+
         const encoder = new TextEncoder();
         const readable = new ReadableStream({
           async start(controller) {
