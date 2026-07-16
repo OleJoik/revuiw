@@ -774,16 +774,65 @@ Bun.serve({
         if (parts.length === 0) {
           return new Response(JSON.stringify({ error: "Empty prompt" }), { status: 400, headers: { "Content-Type": "application/json" } });
         }
-        const { data, error } = await opencode.session.prompt({
+
+        // Use promptAsync + SSE event stream for real-time streaming
+        const { error: promptError } = await opencode.session.promptAsync({
           path: { id: sessionId },
           body: {
             ...(body.agent ? { agent: body.agent } : {}),
             parts,
           },
         });
-        if (error) return new Response(JSON.stringify({ error: "Failed to send prompt" }), { status: 502, headers: { "Content-Type": "application/json" } });
-        return new Response(JSON.stringify(data), {
-          headers: { "Content-Type": "application/json" },
+        if (promptError) {
+          return new Response(JSON.stringify({ error: "Failed to send prompt" }), { status: 502, headers: { "Content-Type": "application/json" } });
+        }
+
+        // Subscribe to the event stream and forward relevant events as SSE
+        const { stream } = await opencode.event();
+        const encoder = new TextEncoder();
+        const readable = new ReadableStream({
+          async start(controller) {
+            try {
+              for await (const event of stream) {
+                const payload = (event as any).payload ?? event;
+                const type = payload?.type;
+                const props = payload?.properties;
+
+                // Filter by sessionID - parts have it on the part object, session events have it directly
+                const eventSessionId = props?.part?.sessionID ?? props?.info?.sessionID ?? props?.sessionID;
+                if (eventSessionId !== sessionId) continue;
+
+                if (type === "message.part.updated" && props?.part?.type === "text") {
+                  if (props.delta) {
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "text.delta", delta: props.delta })}\n\n`));
+                  } else {
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "part.updated", part: props.part })}\n\n`));
+                  }
+                } else if (type === "message.part.updated") {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "part.updated", part: props.part })}\n\n`));
+                } else if (type === "session.idle") {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+                  controller.close();
+                  return;
+                } else if (type === "session.error") {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: props?.error ?? "Unknown error" })}\n\n`));
+                  controller.close();
+                  return;
+                }
+              }
+            } catch (err) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: "Stream disconnected" })}\n\n`));
+              controller.close();
+            }
+          },
+        });
+
+        return new Response(readable, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+          },
         });
       }
 

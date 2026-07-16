@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSetting } from "../hooks";
 import { renderMarkdown, handleCopyClick, highlightCodeBlocks } from "../markdown";
 import {
-  listSessions, createSession, deleteSession, getMessages, sendPrompt, selectionLabel,
+  listSessions, createSession, deleteSession, getMessages, sendPromptStreaming, selectionLabel,
   listModels, switchModel, listAgents, getConfig, resolveDefaultModel,
   listProviders, getProviderAuthMethods, startOAuth, waitOAuthCallback, setProviderCredentials,
   type Session, type Message, type Agent, type SelectionContext, type ModelInfo, type AgentInfo,
@@ -199,8 +199,42 @@ export function OpenCodePanel({
     setMessages(prev => [...prev, { info: { role: "user" }, parts: [{ type: "text", text: userText }] }]);
 
     try {
-      const reply = await sendPrompt({ sessionId: session.id, message: text, agent, context });
-      setMessages(prev => [...prev, reply]);
+      // Add placeholder assistant message for streaming
+      const assistantIdx = messages.length + 1; // after optimistic user message
+      setMessages(prev => [...prev, { info: { role: "assistant" }, parts: [{ type: "text", text: "" }] }]);
+
+      await sendPromptStreaming({ sessionId: session.id, message: text, agent, context }, {
+        onDelta: (delta) => {
+          setMessages(prev => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.info?.role === "assistant" && last.parts?.[0]?.type === "text") {
+              updated[updated.length - 1] = {
+                ...last,
+                parts: [{ type: "text", text: (last.parts[0].text || "") + delta }],
+              };
+            }
+            return updated;
+          });
+        },
+        onPart: (part) => {
+          setMessages(prev => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.info?.role === "assistant") {
+              updated[updated.length - 1] = {
+                ...last,
+                parts: [...(last.parts || []), part],
+              };
+            }
+            return updated;
+          });
+        },
+        onError: (err) => {
+          setMessages(prev => [...prev.slice(0, -1), { info: { role: "error" }, parts: [{ type: "text", text: err }] }]);
+        },
+      });
+
       // Refresh sessions to pick up model info after first prompt
       listSessions().then(list => {
         setSessions(list);

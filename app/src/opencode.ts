@@ -171,15 +171,68 @@ export interface SendPromptArgs {
 
 // Send a prompt. `agent` selects plan (read-only discussion) vs build (can edit).
 // `context` attaches the current visual selection as a labelled code block.
-export async function sendPrompt({ sessionId, message, agent, context }: SendPromptArgs): Promise<Message> {
+// Returns a streaming interface that yields text deltas.
+export interface StreamCallbacks {
+  onDelta?: (delta: string) => void;
+  onPart?: (part: any) => void;
+  onDone?: () => void;
+  onError?: (error: string) => void;
+}
+
+export async function sendPromptStreaming(
+  { sessionId, message, agent, context }: SendPromptArgs,
+  callbacks: StreamCallbacks,
+): Promise<void> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, agent, context: context || undefined }),
   });
   if (!res.ok) throw new Error(`Prompt failed (${res.status})`);
-  const data = await res.json();
-  return { info: { role: "assistant" }, parts: data.parts || [] };
+  if (!res.body) throw new Error("No response body");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const json = line.slice(6);
+      try {
+        const event = JSON.parse(json);
+        if (event.type === "text.delta") {
+          callbacks.onDelta?.(event.delta);
+        } else if (event.type === "part.updated") {
+          callbacks.onPart?.(event.part);
+        } else if (event.type === "done") {
+          callbacks.onDone?.();
+          return;
+        } else if (event.type === "error") {
+          callbacks.onError?.(event.error ?? "Unknown error");
+          return;
+        }
+      } catch {}
+    }
+  }
+  callbacks.onDone?.();
+}
+
+// Legacy non-streaming sendPrompt (kept for compatibility but uses streaming internally)
+export async function sendPrompt({ sessionId, message, agent, context }: SendPromptArgs): Promise<Message> {
+  let text = "";
+  await sendPromptStreaming({ sessionId, message, agent, context }, {
+    onDelta: (delta) => { text += delta; },
+    onError: (err) => { throw new Error(err); },
+  });
+  return { info: { role: "assistant" }, parts: [{ type: "text", text }] };
 }
 
 // Human-readable label for a selection chip, e.g. "server.ts:10-24".
